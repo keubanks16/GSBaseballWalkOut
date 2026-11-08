@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>GS Baseball Walkout Songs</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GS Walkout">
+<meta name="theme-color" content="#0b0b0c">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<style>
+:root{--bg:#0b0b0c;--card:#17171a;--card2:#202024;--line:#2c2c32;--gold:#c5b358;--gold2:#e3d27a;--text:#f3f1ea;--mut:#9a978d;--red:#e5484d;--green:#3fbf6f}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+body{padding-bottom:calc(76px + env(safe-area-inset-bottom))}
+body.np-on{padding-bottom:calc(160px + env(safe-area-inset-bottom))}
+button{font:inherit;color:inherit;border:0;background:var(--card2);border-radius:12px;padding:10px 14px;cursor:pointer}
+button:active{transform:scale(.97)}
+button.gold{background:var(--gold);color:#111;font-weight:700}
+button.ghost{background:transparent;border:1px solid var(--line)}
+button.danger{background:transparent;border:1px solid var(--red);color:var(--red)}
+input,select,textarea{font:inherit;color:var(--text);background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%}
+input[type=range]{padding:0;border:0;background:none;accent-color:var(--gold)}
+input[type=checkbox]{width:auto;accent-color:var(--gold);transform:scale(1.3)}
+label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}
+label input,label select{margin-top:4px}
+h2{margin:18px 0 8px;font-size:20px}
+h3{margin:22px 0 6px;font-size:16px;color:var(--gold)}
+small,.mut{color:var(--mut)}
+header{position:sticky;top:0;z-index:5;background:rgba(11,11,12,.92);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);padding:calc(10px + env(safe-area-inset-top)) 16px 10px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line)}
+.logo{width:40px;height:40px;border-radius:10px;background:var(--gold);color:#111;font-weight:900;display:grid;place-items:center;font-size:17px;letter-spacing:-.5px}
+header .t{flex:1;min-width:0}
+header .t b{display:block;font-size:17px}
+header .t small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+main{padding:12px 16px;max-width:720px;margin:0 auto}
+.view{display:none}.view.on{display:block}
+nav{position:fixed;left:0;right:0;bottom:0;z-index:6;display:flex;background:#111113;border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;background:none;border-radius:0;padding:9px 0 8px;font-size:11px;color:var(--mut);display:flex;flex-direction:column;align-items:center;gap:2px}
+nav button span{font-size:22px;line-height:1}
+nav button.on{color:var(--gold)}
+.nextbtn{width:100%;padding:18px;border-radius:18px;background:linear-gradient(135deg,var(--gold),#a8963f);color:#111;text-align:left;display:flex;align-items:center;gap:14px;box-shadow:0 6px 24px rgba(197,179,88,.18)}
+.nextbtn .ic{font-size:34px}
+.nextbtn small{color:#2a2715;font-weight:700;letter-spacing:1px;font-size:12px}
+.nextbtn big{display:block;font-size:22px;font-weight:800}
+.tools{display:flex;gap:8px;margin:12px 0}
+.tools button{flex:1;font-size:14px}
+.card{display:flex;align-items:center;gap:12px;background:var(--card);border:2px solid transparent;border-radius:14px;padding:10px 12px;margin:8px 0;cursor:pointer}
+.card.up{border-color:var(--gold)}
+.card.playing{background:#2a2614;border-color:var(--gold2)}
+.ord{width:22px;text-align:center;color:var(--mut);font-weight:700}
+.jn{width:44px;height:44px;border-radius:50%;background:#000;border:2px solid var(--gold);color:var(--gold);font-weight:800;display:grid;place-items:center;font-size:17px;flex:none}
+.info{flex:1;min-width:0}
+.info b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.info small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pl{font-size:22px;color:var(--gold)}
+.tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.5px;color:#111;background:var(--gold);padding:2px 6px;border-radius:6px;margin-left:6px;vertical-align:2px}
+.warn{color:#f0a04b}
+.empty{background:var(--card);border-radius:16px;padding:22px;text-align:center;margin-top:14px}
+.empty p{color:var(--mut)}
+#np{position:fixed;left:8px;right:8px;bottom:calc(66px + env(safe-area-inset-bottom));z-index:7;background:#1d1b12;border:1px solid var(--gold);border-radius:16px;padding:10px 12px;display:none;align-items:center;gap:10px;box-shadow:0 8px 30px rgba(0,0,0,.6)}
+body.np-on #np{display:flex}
+#np .i{flex:1;min-width:0}
+#np b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#np small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar{height:5px;background:#3a3620;border-radius:4px;margin-top:6px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--gold)}
+#np button{padding:12px 14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px;margin-top:10px}
+.pad{aspect-ratio:1;border-radius:16px;background:var(--card);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:8px;font-size:13px;font-weight:600;border:2px solid transparent}
+.pad span{font-size:34px}
+.pad.on{border-color:var(--gold);background:#2a2614}
+.pad.add{border:2px dashed var(--line);color:var(--mut)}
+.editing .pad:not(.add){border-color:#555}
+.sec{background:var(--card);border-radius:14px;padding:4px 14px 14px;margin:12px 0}
+.row{display:flex;gap:10px;align-items:flex-end}
+.row>*{flex:1}
+.row .sm{flex:0 0 90px}
+.hint{font-size:12px;color:var(--mut);margin-top:4px}
+#sheet{position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.6);display:none;overflow-y:auto;-webkit-overflow-scrolling:touch}
+#sheet.open{display:block}
+.sheet-card{background:var(--bg);min-height:100%;max-width:720px;margin:0 auto;padding:0 16px calc(40px + env(safe-area-inset-bottom))}
+.sheet-head{position:sticky;top:0;z-index:2;background:var(--bg);display:flex;align-items:center;justify-content:space-between;gap:8px;padding:calc(10px + env(safe-area-inset-top)) 0 10px;border-bottom:1px solid var(--line)}
+.sheet-head b{font-size:17px}
+.seg{display:flex;background:var(--card2);border-radius:12px;padding:3px;gap:3px}
+.seg label{flex:1;margin:0;text-align:center;padding:9px 4px;border-radius:9px;font-size:13px;color:var(--text);cursor:pointer}
+.seg input{display:none}
+.seg label:has(input:checked){background:var(--gold);color:#111;font-weight:700}
+.songbox{display:flex;align-items:center;gap:10px;background:var(--card);border-radius:12px;padding:12px}
+.songbox .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.filebtn{display:inline-block;background:var(--gold);color:#111;font-weight:700;border-radius:12px;padding:10px 14px;margin:0;font-size:15px;cursor:pointer;white-space:nowrap}
+.filebtn input{display:none}
+audio{width:100%;margin-top:10px}
+.big{width:100%;padding:16px;font-size:17px;margin-top:16px}
+.check{display:flex;align-items:center;gap:12px;background:var(--card);border-radius:12px;padding:12px;margin:10px 0;color:var(--text);font-size:15px}
+.check div{flex:1}
+.lu{display:flex;align-items:center;gap:8px;background:var(--card);border-radius:12px;padding:8px 10px;margin:6px 0}
+.lu .info{font-size:15px}
+.lu button{padding:8px 11px}
+.rec{background:var(--red);color:#fff;font-weight:700}
+.rec.live{animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.55}}
+.toast{position:fixed;left:50%;top:calc(70px + env(safe-area-inset-top));transform:translateX(-50%);background:#222;border:1px solid var(--gold);padding:10px 16px;border-radius:12px;z-index:50;font-size:14px;max-width:90%;text-align:center}
+.vals{float:right;color:var(--gold)}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">GS</div>
+  <div class="t"><b>Walkout Songs</b><small id="teamName"></small></div>
+</header>
+
+<main>
+  <section class="view on" id="v-game"></section>
+  <section class="view" id="v-roster"></section>
+  <section class="view" id="v-sounds"></section>
+  <section class="view" id="v-settings"></section>
+</main>
+
+<div id="np">
+  <div class="i"><b id="np-name"></b><small id="np-song"></small><div class="bar"><i id="np-prog"></i></div></div>
+  <button onclick="fadeNow()">Fade</button>
+  <button onclick="stopAll()" aria-label="Stop">■</button>
+</div>
+
+<nav>
+  <button class="on" data-v="game"><span>⚾</span>Game</button>
+  <button data-v="roster"><span>👥</span>Roster</button>
+  <button data-v="sounds"><span>📣</span>Sounds</button>
+  <button data-v="settings"><span>⚙️</span>Settings</button>
+</nav>
+
+<div id="sheet"></div>
+
+<script>
+/* ============ helpers ============ */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-5);
+const fmt = s => { s = Math.max(0, +s || 0); const m = Math.floor(s / 60), r = Math.round((s - m * 60) * 10) / 10; return m + ':' + (r < 10 ? '0' : '') + r; };
+const once = fn => { let d = false; return (...a) => { if (!d) { d = true; fn && fn(...a); } }; };
+function toast(msg, ms = 2200) { const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), ms); }
+
+/* ============ storage (IndexedDB) ============ */
+let _db;
+function openDB() {
+  return _db ||= new Promise((res, rej) => {
+    const r = indexedDB.open('gs-walkout', 1);
+    r.onupgradeneeded = () => { const d = r.result; d.createObjectStore('kv'); d.createObjectStore('audio'); };
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+async function idb(store, mode, fn) {
+  const d = await openDB();
+  return new Promise((res, rej) => {
+    const tx = d.transaction(store, mode); const req = fn(tx.objectStore(store));
+    tx.oncomplete = () => res(req && req.result); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error);
+  });
+}
+const kvGet = k => idb('kv', 'readonly', s => s.get(k));
+const kvSet = (k, v) => idb('kv', 'readwrite', s => s.put(v, k));
+const audioGet = k => idb('audio', 'readonly', s => s.get(k));
+const audioSet = (k, v) => idb('audio', 'readwrite', s => s.put(v, k));
+const audioDel = k => k ? idb('audio', 'readwrite', s => s.delete(k)) : Promise.resolve();
+const audioKeys = () => idb('audio', 'readonly', s => s.getAllKeys());
+const audioClear = () => idb('audio', 'readwrite', s => s.clear());
+
+/* ============ data ============ */
+let data;
+const newTeam = name => ({ id: uid(), name, players: [], lineup: [], upNext: 0 });
+function defaultData() {
+  const t = newTeam('Georgia Stingerz');
+  return { v: 1, teams: [t], teamId: t.id, settings: { voice: '', rate: 0.9, pitch: 1, template: 'Now batting, number {number}, {name}!', length: 15, fadeOut: 2, duck: 0.25, sfx: [] } };
+}
+const team = () => data.teams.find(t => t.id === data.teamId) || data.teams[0];
+const S = () => data.settings;
+let saveTimer;
+function save() { clearTimeout(saveTimer); saveTimer = setTimeout(() => kvSet('data', data).catch(e => toast('Save failed: ' + e.message)), 150); }
+function newPlayer() { const s = S(); return { id: uid(), name: '', number: '', position: '', songId: null, songName: '', start: 0, length: s.length, fadeOut: s.fadeOut, vol: 100, announce: 'tts', text: '', voiceId: null, echo: true, under: false }; }
+function cleanLineup(t) { t.lineup = t.lineup.filter(id => t.players.some(p => p.id === id)); if (t.upNext >= t.lineup.length) t.upNext = 0; }
+
+/* ============ audio engine ============ */
+let ctx, master;
+function setSession(type) { try { if (navigator.audioSession) navigator.audioSession.type = type; } catch (e) {} }
+function ac() {
+  if (!ctx) { const C = window.AudioContext || window.webkitAudioContext; ctx = new C(); master = ctx.createGain(); master.connect(ctx.destination); }
+  if (ctx.state !== 'running') ctx.resume();
+  return ctx;
+}
+const decodeRaw = ab => new Promise((res, rej) => ac().decodeAudioData(ab.slice(0), res, rej));
+async function loadRaw(id) { const r = id && await audioGet(id); return r ? r.data : null; }
+const bufCache = new Map(), clipCache = new Map();
+function getBuf(id) {
+  if (!id) return Promise.resolve(null);
+  if (!bufCache.has(id)) { const pr = loadRaw(id).then(d => d && decodeRaw(d)); bufCache.set(id, pr); pr.catch(() => bufCache.delete(id)); }
+  return bufCache.get(id);
+}
+function sliceBuf(b, st, dur) {
+  const sr = b.sampleRate, s = Math.min(Math.floor(st * sr), Math.max(0, b.length - sr)), e = Math.min(b.length, s + Math.floor(dur * sr)), n = Math.max(1, e - s);
+  const out = ctx.createBuffer(b.numberOfChannels, n, sr);
+  for (let c = 0; c < b.numberOfChannels; c++) out.copyToChannel(b.getChannelData(c).subarray(s, s + n), c);
+  return out;
+}
+// Only keep the part of the song we actually play (saves phone memory)
+function getClip(p) {
+  const st = +p.start || 0, len = +p.length || 0, span = len > 0 ? len + 20 : 360;
+  if (p._song) return decodeRaw(p._song.data).then(b => sliceBuf(b, st, span));
+  if (!p.songId) return Promise.resolve(null);
+  const key = p.songId + '|' + st + '|' + len;
+  if (!clipCache.has(key)) {
+    const pr = loadRaw(p.songId).then(d => d && decodeRaw(d)).then(b => b && sliceBuf(b, st, span));
+    clipCache.set(key, pr); pr.catch(() => clipCache.delete(key));
+    while (clipCache.size > 24) clipCache.delete(clipCache.keys().next().value);
+  }
+  return clipCache.get(key);
+}
+function getVoice(p) { return p._voice ? decodeRaw(p._voice.data) : getBuf(p.voiceId); }
+function forgetAudio(id) { if (!id) return; bufCache.delete(id); for (const k of [...clipCache.keys()]) if (k.startsWith(id + '|')) clipCache.delete(k); }
+
+let cur = null, np = null, voiceSrc = null, playToken = 0, raf;
+
+function findVoice(name) { try { return speechSynthesis.getVoices().find(v => v.name === name) || null; } catch (e) { return null; } }
+function announceText(p) {
+  if (p.text && p.text.trim()) return p.text.trim();
+  let t = S().template || '{name}';
+  if (!String(p.number).trim()) t = t.replace(/number\s*\{number\}\s*,?\s*/i, '').replace(/\{number\}\s*,?\s*/g, '');
+  const first = (p.name || '').split(' ')[0];
+  return t.replace(/\{number\}/g, p.number).replace(/\{name\}/g, p.name).replace(/\{first\}/g, first).replace(/\{position\}/g, p.position || '');
+}
+function speak(text, done) {
+  done = once(done);
+  if (!('speechSynthesis' in window) || !text) return done();
+  const u = new SpeechSynthesisUtterance(text);
+  const v = findVoice(S().voice); if (v) { u.voice = v; u.lang = v.lang; }
+  u.rate = +S().rate || 0.9; u.pitch = +S().pitch || 1; u.volume = 1;
+  u.onend = () => done(); u.onerror = () => done();
+  speechSynthesis.cancel(); speechSynthesis.speak(u);
+  setTimeout(done, 2500 + text.length * 110 / u.rate); // safety net if the browser never fires onend
+}
+function playVoice(buf, echo, done) {
+  done = once(done);
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const g = ctx.createGain(); g.gain.value = 1;
+  src.connect(g); g.connect(master);
+  if (echo) { // stadium P.A. echo
+    const d = ctx.createDelay(1), fb = ctx.createGain(), wet = ctx.createGain();
+    d.delayTime.value = 0.17; fb.gain.value = 0.33; wet.gain.value = 0.42;
+    g.connect(d); d.connect(fb); fb.connect(d); d.connect(wet); wet.connect(master);
+    setTimeout(() => { try { g.disconnect(d); } catch (e) {} }, (buf.duration + 3) * 1000);
+  }
+  src.onended = () => { if (voiceSrc === src) voiceSrc = null; done(); };
+  voiceSrc = src; src.start();
+}
+function startMusic(clip, p, duckLevel, deferEnd) {
+  const now = ctx.currentTime + 0.02;
+  const src = ctx.createBufferSource(); src.buffer = clip;
+  const env = ctx.createGain(), duck = ctx.createGain();
+  src.connect(env); env.connect(duck); duck.connect(master);
+  const vol = (+p.vol || 100) / 100;
+  env.gain.setValueAtTime(0, now); env.gain.linearRampToValueAtTime(vol, now + 0.08);
+  duck.gain.setValueAtTime(duckLevel, now);
+  src.start(now);
+  cur = { src, env, duck, vol, p };
+  src.onended = () => { if (cur && cur.src === src) { cur = null; np = null; renderNP(); } };
+  if (np && !deferEnd) np.phase = 'music';
+  if (!deferEnd) scheduleEnd(p);
+  renderNP();
+}
+function scheduleEnd(p) {
+  if (!cur) return;
+  const now = ctx.currentTime, left = Math.max(0.2, cur.src.buffer.duration - (now - (cur.t0 ?? now)));
+  const want = +p.length || 0, L = want > 0 ? Math.min(want, left) : left;
+  const fo = Math.min(+p.fadeOut || 0, L);
+  cur.segT0 = now; cur.endT = now + L;
+  cur.env.gain.setValueAtTime(cur.vol, Math.max(now + 0.1, now + L - fo));
+  cur.env.gain.linearRampToValueAtTime(0, now + L);
+  try { cur.src.stop(now + L + 0.05); } catch (e) {}
+}
+function stopWalkup(fade = 0.25) {
+  playToken++;
+  try { speechSynthesis.cancel(); } catch (e) {}
+  if (voiceSrc) { try { voiceSrc.stop(); } catch (e) {} voiceSrc = null; }
+  if (cur && ctx) {
+    const c = cur; cur = null; const now = ctx.currentTime;
+    c.env.gain.cancelScheduledValues(now); c.env.gain.setValueAtTime(c.env.gain.value, now); c.env.gain.linearRampToValueAtTime(0, now + fade);
+    try { c.src.stop(now + fade + 0.05); } catch (e) {}
+  }
+  np = null; renderNP();
+}
+function fadeNow() { stopWalkup(2.5); }
+function stopAll() { stopWalkup(0.15); stopSfx(); }
+
+async function playWalkup(p) {
+  ac(); setSession('playback');
+  stopWalkup(0.3); stopSfx();
+  const tok = ++playToken;
+  np = { p, phase: 'intro' }; renderNP();
+  const clipP = getClip(p).catch(() => null);
+  const mode = p.announce || 'tts';
+  let introDone; const introP = new Promise(r => introDone = once(r));
+  if (mode === 'tts') speak(announceText(p), introDone);
+  else if (mode === 'voice' && (p.voiceId || p._voice)) getVoice(p).then(b => { if (tok !== playToken) return; b ? playVoice(b, p.echo, introDone) : introDone(); }).catch(introDone);
+  else introDone();
+
+  if (p.under && mode !== 'none') {
+    const clip = await clipP; if (tok !== playToken) return;
+    if (clip) startMusic(clip, p, +S().duck || 0.25, true);
+    if (cur) cur.t0 = ctx.currentTime;
+    await introP; if (tok !== playToken) return;
+    if (cur) { const now = ctx.currentTime; cur.duck.gain.setValueAtTime(cur.duck.gain.value, now); cur.duck.gain.linearRampToValueAtTime(1, now + 0.7); scheduleEnd(p); if (np) np.phase = 'music'; renderNP(); }
+    else { np = null; renderNP(); }
+  } else {
+    await introP; if (tok !== playToken) return;
+    const clip = await clipP; if (tok !== playToken) return;
+    if (clip) startMusic(clip, p, 1); else { np = null; renderNP(); if (p.songId || p._song) toast('Could not play that song file'); }
+  }
+}
+
+/* ============ sound effects ============ */
+let sfxCur = null;
+function stopSfx() { if (sfxCur) { sfxCur.stop(); sfxCur = null; markSfx(); } }
+function sfxBus() { const g = ctx.createGain(); g.connect(master); return g; }
+function busStop(g, extra) { return () => { const n = ctx.currentTime; g.gain.cancelScheduledValues(n); g.gain.setValueAtTime(g.gain.value, n); g.gain.linearRampToValueAtTime(0, n + 0.15); extra && extra(); setTimeout(() => g.disconnect(), 400); }; }
+function organ(g, f, t, d) {
+  [1, 2, 3, 4, 6].forEach((h, i) => {
+    const o = ctx.createOscillator(), a = ctx.createGain(), lvl = [.32, .2, .12, .07, .04][i];
+    o.type = 'sine'; o.frequency.value = f * h;
+    a.gain.setValueAtTime(0, t); a.gain.linearRampToValueAtTime(lvl, t + .012); a.gain.setValueAtTime(lvl, t + d - .03); a.gain.linearRampToValueAtTime(0, t + d);
+    o.connect(a); a.connect(g); o.start(t); o.stop(t + d + .02);
+  });
+}
+function horn(g, t, d) {
+  const lp = ctx.createBiquadFilter(), a = ctx.createGain(); lp.type = 'lowpass'; lp.frequency.value = 2400;
+  a.gain.setValueAtTime(0, t); a.gain.linearRampToValueAtTime(.22, t + .02); a.gain.setValueAtTime(.22, t + d - .05); a.gain.linearRampToValueAtTime(0, t + d);
+  [466, 471, 554, 698].forEach(f => { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(f * .93, t); o.frequency.linearRampToValueAtTime(f, t + .07); o.connect(lp); o.start(t); o.stop(t + d + .02); });
+  lp.connect(a); a.connect(g);
+}
+let noiseBuf;
+function clap(g, t) {
+  if (!noiseBuf) { noiseBuf = ctx.createBuffer(1, ctx.sampleRate * .3, ctx.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+  const s = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), a = ctx.createGain();
+  s.buffer = noiseBuf; bp.type = 'bandpass'; bp.frequency.value = 1300; bp.Q.value = .9;
+  a.gain.setValueAtTime(0, t); a.gain.linearRampToValueAtTime(.9, t + .004); a.gain.exponentialRampToValueAtTime(.001, t + .16);
+  s.connect(bp); bp.connect(a); a.connect(g); s.start(t); s.stop(t + .2);
+}
+const N = { C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23, G4: 392, A4: 440, B4: 493.88, C5: 523.25, D5: 587.33, E5: 659.25, G5: 783.99, C6: 1046.5 };
+const BUILTIN = [
+  { id: 'b-charge', name: 'Charge!', emoji: '🎺', len: 2.2, play(g, t) { [[N.G4, .17], [N.C5, .17], [N.E5, .17], [N.G5, .34], [N.E5, .17], [N.G5, 1]].forEach(([f, d]) => { organ(g, f, t, d * .92); t += d; }); } },
+  { id: 'b-horn', name: 'Air Horn', emoji: '📯', len: 1.8, play(g, t) { horn(g, t, .22); horn(g, t + .3, .22); horn(g, t + .6, 1); } },
+  { id: 'b-clap', name: "Let's Go Claps", emoji: '👏', len: 4, play(g, t) { for (let r = 0; r < 2; r++) [0, .32, .8, .98, 1.16].forEach(x => clap(g, t + r * 1.9 + x)); } },
+  { id: 'b-rally', name: 'Rally Organ', emoji: '🎹', len: 3.4, play(g, t) { const sc = [N.C4, N.D4, N.E4, N.F4, N.G4, N.A4, N.B4, N.C5]; for (let r = 0; r < 2; r++) sc.forEach((f, i) => organ(g, f * (r ? 2 : 1), t + r * 1.2 + i * .15, .14)); [N.C5, N.E5, N.G5, N.C6].forEach(f => organ(g, f, t + 2.45, .9)); } },
+];
+async function playSfx(id) {
+  ac(); setSession('playback');
+  if (sfxCur) { const same = sfxCur.id === id; stopSfx(); if (same) return; }
+  stopWalkup(0.3);
+  const b = BUILTIN.find(x => x.id === id);
+  const g = sfxBus(), me = { id, stop: busStop(g) };
+  sfxCur = me; markSfx();
+  const done = () => { if (sfxCur === me) { sfxCur = null; markSfx(); } };
+  if (b) { b.play(g, ctx.currentTime + .03); setTimeout(done, b.len * 1000); return; }
+  const sx = S().sfx.find(x => x.id === id); if (!sx) return done();
+  try {
+    const buf = await getBuf(sx.audioId); if (sfxCur !== me || !buf) return done();
+    const src = ctx.createBufferSource(); src.buffer = buf; g.gain.value = (+sx.vol || 100) / 100; src.connect(g); src.start();
+    me.stop = busStop(g, () => { try { src.stop(ctx.currentTime + .2); } catch (e) {} });
+    src.onended = done;
+  } catch (e) { done(); toast('Could not play that sound'); }
+}
+function markSfx() { document.querySelectorAll('.pad[data-id]').forEach(el => el.classList.toggle('on', !!sfxCur && sfxCur.id === el.dataset.id)); }
+
+/* ============ now playing bar ============ */
+function renderNP() {
+  document.body.classList.toggle('np-on', !!np);
+  if (np) {
+    const p = np.p;
+    $('#np-name').textContent = (p.number !== '' && p.number != null ? '#' + p.number + ' ' : '') + (p.name || 'Preview');
+    $('#np-song').textContent = np.phase === 'intro' ? '🎤 Announcing…' : '🎵 ' + (p.songName || (p._song && p._song.name) || '');
+  }
+  document.querySelectorAll('.card[data-id]').forEach(el => el.classList.toggle('playing', !!np && np.p.id === el.dataset.id));
+  cancelAnimationFrame(raf);
+  const tick = () => {
+    const bar = $('#np-prog');
+    bar.style.width = (cur && cur.endT) ? Math.min(100, (ctx.currentTime - cur.segT0) / (cur.endT - cur.segT0) * 100) + '%' : '0%';
+    if (np) raf = requestAnimationFrame(tick);
+  };
+  if (np) raf = requestAnimationFrame(tick);
+}
+
+/* ============ views ============ */
+let view = 'game';
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => go(b.dataset.v));
+function go(v) {
+  view = v;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  document.querySelectorAll('.view').forEach(s => s.classList.toggle('on', s.id === 'v-' + v));
+  render(); window.scrollTo(0, 0);
+}
+function render() {
+  $('#teamName').textContent = team().name;
+  ({ game: renderGame, roster: renderRoster, sounds: renderSounds, settings: renderSettings })[view]();
+  renderNP();
+}
+const pName = p => esc(p.name || 'Unnamed');
+const songLine = p => p.songId ? '🎵 ' + esc(p.songName || 'Song') + (p.start ? ' · from ' + fmt(p.start) : '') : '<span class="warn">⚠️ No song yet</span>';
+
+function renderGame() {
+  const t = team(); cleanLineup(t);
+  const el = $('#v-game');
+  if (!t.players.length) {
+    el.innerHTML = `<div class="empty"><div style="font-size:48px">⚾🎶</div><h2>Let's set up your walkout songs</h2><p>Add each player, pick their song, and choose where it starts. Then run the lineup on game day from this screen.</p><button class="gold big" onclick="editPlayer()">+ Add your first player</button></div>`;
+    return;
+  }
+  const L = t.lineup.map(id => t.players.find(p => p.id === id));
+  const up = L[t.upNext];
+  const bench = t.players.filter(p => !t.lineup.includes(p.id));
+  el.innerHTML = `
+    ${up ? `<button class="nextbtn" onclick="playNext()"><div class="ic">▶</div><div><small>NEXT UP · BATTING ${t.upNext + 1}</small><big>${up.number !== '' ? '#' + esc(up.number) + ' ' : ''}${pName(up)}</big></div></button>`
+         : `<div class="empty"><p>No one is in the batting order yet.</p></div>`}
+    <div class="tools"><button onclick="openLineup()">✏️ Batting order</button><button onclick="setUp(0)">⏮ Top of order</button></div>
+    ${L.map((p, i) => `<div class="card ${i === t.upNext ? 'up' : ''}" data-id="${p.id}" onclick="playAt(${i})">
+        <div class="ord">${i + 1}</div><div class="jn">${esc(p.number) || '–'}</div>
+        <div class="info"><b>${pName(p)}${p.position ? ` <small style="display:inline">· ${esc(p.position)}</small>` : ''}</b><small>${songLine(p)}</small></div><div class="pl">▶</div></div>`).join('')}
+    ${bench.length ? `<h3>Bench · tap to play</h3>` + bench.map(p => `<div class="card" data-id="${p.id}" onclick="playId('${p.id}')">
+        <div class="ord"></div><div class="jn">${esc(p.number) || '–'}</div>
+        <div class="info"><b>${pName(p)}</b><small>${songLine(p)}</small></div><div class="pl">▶</div></div>`).join('') : ''}
+    <p class="hint" style="text-align:center;margin-top:18px">Tap a player to play their walkout. “Next up” moves down the order automatically.</p>`;
+  preloadLineup();
+}
+function playAt(i) { const t = team(), p = t.players.find(x => x.id === t.lineup[i]); if (!p) return; t.upNext = (i + 1) % t.lineup.length; save(); playWalkup(p); renderGame(); }
+function playNext() { playAt(team().upNext); }
+function playId(id) { const p = team().players.find(x => x.id === id); if (p) playWalkup(p); }
+function setUp(i) { team().upNext = i; save(); renderGame(); toast('Back to the top of the order'); }
+
+let preloading = false;
+async function preloadLineup() {
+  if (preloading) return; preloading = true;
+  try { const t = team(); for (const id of [...t.lineup.slice(t.upNext), ...t.lineup.slice(0, t.upNext)].slice(0, 6)) { const p = t.players.find(x => x.id === id); if (p && p.songId) { ac(); await getClip(p).catch(() => {}); } } }
+  finally { preloading = false; }
+}
+
+/* ---- batting order editor ---- */
+function openLineup() {
+  const t = team(); cleanLineup(t);
+  const L = t.lineup.map(id => t.players.find(p => p.id === id)), bench = t.players.filter(p => !t.lineup.includes(p.id));
+  openSheet(`<div class="sheet-head"><span style="width:60px"></span><b>Batting Order</b><button class="gold" onclick="closeSheet();render()">Done</button></div>
+    ${L.length ? '' : '<p class="mut">Add players from the bench below.</p>'}
+    ${L.map((p, i) => `<div class="lu"><div class="ord">${i + 1}</div><div class="info"><b>${p.number !== '' ? '#' + esc(p.number) + ' ' : ''}${pName(p)}</b></div>
+      <button onclick="luMove(${i},-1)" ${i ? '' : 'disabled'}>↑</button><button onclick="luMove(${i},1)" ${i < L.length - 1 ? '' : 'disabled'}>↓</button><button onclick="luSit('${p.id}')" aria-label="Move to bench">✕</button></div>`).join('')}
+    <h3>Bench</h3>
+    ${bench.length ? bench.map(p => `<div class="lu"><div class="info"><b>${p.number !== '' ? '#' + esc(p.number) + ' ' : ''}${pName(p)}</b></div><button class="gold" onclick="luAdd('${p.id}')">+ Bat</button></div>`).join('') : '<p class="mut">Everyone is in the order.</p>'}
+    <div class="tools" style="margin-top:18px"><button onclick="luAll()">Add everyone</button><button onclick="luClear()">Clear order</button></div>`);
+}
+function luMove(i, d) { const L = team().lineup; [L[i], L[i + d]] = [L[i + d], L[i]]; save(); openLineup(); }
+function luSit(id) { const t = team(); t.lineup = t.lineup.filter(x => x !== id); cleanLineup(t); save(); openLineup(); }
+function luAdd(id) { team().lineup.push(id); save(); openLineup(); }
+function luAll() { const t = team(); t.players.forEach(p => t.lineup.includes(p.id) || t.lineup.push(p.id)); save(); openLineup(); }
+function luClear() { if (!confirm('Clear the batting order?')) return; const t = team(); t.lineup = []; t.upNext = 0; save(); openLineup(); }
+
+/* ---- roster ---- */
+function renderRoster() {
+  const t = team();
+  $('#v-roster').innerHTML = `
+    <button class="gold big" style="margin-top:4px" onclick="editPlayer()">+ Add player</button>
+    ${t.players.length ? '' : '<p class="mut" style="text-align:center">No players yet.</p>'}
+    ${t.players.map(p => `<div class="card" onclick="editPlayer('${p.id}')"><div class="jn">${esc(p.number) || '–'}</div>
+      <div class="info"><b>${pName(p)}${p.position ? ` <small style="display:inline">· ${esc(p.position)}</small>` : ''}</b><small>${songLine(p)}</small>
+      <small>${p.announce === 'voice' ? '🎤 Your recording' : p.announce === 'none' ? '🔇 No announcement' : '🗣️ “' + esc(announceText(p)) + '”'}</small></div>
+      <button class="ghost" onclick="event.stopPropagation();playWalkup(team().players.find(x=>x.id==='${p.id}'))">▶</button></div>`).join('')}`;
+}
+
+/* ---- player editor ---- */
+let edit = null, recorder = null;
+function editPlayer(id) {
+  const orig = id && team().players.find(x => x.id === id);
+  edit = { p: orig ? { ...orig } : newPlayer(), isNew: !orig, urls: [] };
+  renderEditor();
+}
+function renderEditor() {
+  const p = edit.p, mode = p.announce || 'tts', hasVoice = !!(p._voice || p.voiceId);
+  const songName = p._song ? p._song.name : p.songName;
+  openSheet(`<div class="sheet-head"><button onclick="closeSheet()">Cancel</button><b>${edit.isNew ? 'Add Player' : 'Edit Player'}</b><button class="gold" onclick="savePlayer()">Save</button></div>
+    <div class="row"><label>Player name<input id="f-name" value="${esc(p.name)}" placeholder="e.g. MJ Eubanks" autocomplete="off"></label><label class="sm">Jersey #<input id="f-num" value="${esc(p.number)}" inputmode="numeric" maxlength="3"></label></div>
+    <label>Position (optional)<input id="f-pos" value="${esc(p.position)}" placeholder="e.g. Shortstop"></label>
+
+    <h3>🎵 Walkout song</h3>
+    <div class="songbox"><div class="nm">${songName ? esc(songName) : '<span class="mut">No song chosen</span>'}</div>
+      <label class="filebtn">${songName ? 'Change' : 'Choose song'}<input type="file" accept="audio/*,.mp3,.m4a,.aac,.wav" onchange="pickSong(this)"></label></div>
+    <p class="hint">Pick an MP3/M4A from your Files app. Songs are saved on this device.</p>
+    ${songName ? `<audio id="f-audio" controls preload="metadata" playsinline></audio>
+    <div class="row"><label>Start at (seconds)<input id="f-start" type="number" inputmode="decimal" step="0.5" min="0" value="${+p.start || 0}"></label>
+      <button style="flex:0 0 auto;margin-bottom:1px" onclick="markStart()">⏱ Use spot playing now</button></div>
+    <p class="hint">Play the song above, pause right where the good part starts, then tap “Use spot playing now.”</p>` : ''}
+    <label>Play length <span class="vals" id="lv"></span><input id="f-len" type="range" min="0" max="60" step="1" value="${+p.length || 0}" oninput="lbl()"></label>
+    <label>Fade out <span class="vals" id="fv"></span><input id="f-fade" type="range" min="0" max="8" step="0.5" value="${+p.fadeOut || 0}" oninput="lbl()"></label>
+    <label>Song volume <span class="vals" id="vv"></span><input id="f-vol" type="range" min="10" max="100" step="5" value="${+p.vol || 100}" oninput="lbl()"></label>
+
+    <h3>🎤 Announcement</h3>
+    <div class="seg">
+      <label><input type="radio" name="f-ann" value="tts" ${mode === 'tts' ? 'checked' : ''} onchange="reEdit()">Announcer</label>
+      <label><input type="radio" name="f-ann" value="voice" ${mode === 'voice' ? 'checked' : ''} onchange="reEdit()">My voice</label>
+      <label><input type="radio" name="f-ann" value="none" ${mode === 'none' ? 'checked' : ''} onchange="reEdit()">None</label>
+    </div>
+    ${mode === 'tts' ? `<label>What the announcer says<input id="f-text" value="${esc(p.text)}" placeholder="${esc(announceText({ ...p, text: '' }) || 'Now batting…')}"></label>
+      <p class="hint">Leave blank to use your template. Spell names how they sound if needed (e.g. “Kar-sin”).</p>
+      <button onclick="testAnn()">▶ Hear it</button>` : ''}
+    ${mode === 'voice' ? `<div class="songbox" style="margin-top:10px"><div class="nm">${hasVoice ? '✅ ' + esc(p._voice ? p._voice.name : 'Recording saved') : '<span class="mut">No recording yet</span>'}</div>
+        <button class="rec ${recorder ? 'live' : ''}" onclick="toggleRec()">${recorder ? '■ Stop' : '● Record'}</button></div>
+      <div class="tools">${hasVoice ? '<button onclick="testAnn()">▶ Hear it</button>' : ''}<label class="filebtn" style="background:var(--card2);color:var(--text);font-weight:400;flex:1;text-align:center">Upload clip<input type="file" accept="audio/*" onchange="pickVoice(this)"></label></div>
+      <label class="check"><div>Stadium echo on my voice</div><input type="checkbox" id="f-echo" ${p.echo ? 'checked' : ''}></label>` : ''}
+    ${mode !== 'none' ? `<label class="check"><div>Start music under the announcement<br><small>Song plays quietly while the name is called, then comes up full.</small></div><input type="checkbox" id="f-under" ${p.under ? 'checked' : ''}></label>` : ''}
+
+    <button class="gold big" onclick="previewWalkup()">▶ Preview full walkout</button>
+    ${edit.isNew ? '' : `<button class="danger big" onclick="deletePlayer()">Delete player</button>`}`);
+  lbl(); loadEditorAudio();
+}
+function lbl() {
+  const l = +$('#f-len').value, f = +$('#f-fade').value, v = +$('#f-vol').value;
+  $('#lv').textContent = l ? l + ' sec' : 'Whole song'; $('#fv').textContent = f ? f + ' sec' : 'None'; $('#vv').textContent = v + '%';
+}
+function readForm() {
+  if (!edit) return; const p = edit.p, v = s => $(s) && $(s).value;
+  p.name = v('#f-name').trim(); p.number = v('#f-num').trim(); p.position = v('#f-pos').trim();
+  if ($('#f-start')) p.start = Math.max(0, +v('#f-start') || 0);
+  p.length = +v('#f-len'); p.fadeOut = +v('#f-fade'); p.vol = +v('#f-vol');
+  const r = document.querySelector('input[name=f-ann]:checked'); if (r) p.announce = r.value;
+  if ($('#f-text')) p.text = v('#f-text');
+  if ($('#f-echo')) p.echo = $('#f-echo').checked;
+  if ($('#f-under')) p.under = $('#f-under').checked;
+}
+function reEdit() { readForm(); const y = $('#sheet').scrollTop; renderEditor(); $('#sheet').scrollTop = y; }
+async function loadEditorAudio() {
+  const a = $('#f-audio'); if (!a) return;
+  let blob;
+  if (edit.p._song) blob = new Blob([edit.p._song.data], { type: edit.p._song.type });
+  else if (edit.p.songId) { const r = await audioGet(edit.p.songId); if (r) blob = new Blob([r.data], { type: r.type }); }
+  if (!blob || !edit) return;
+  const u = URL.createObjectURL(blob); edit.urls.push(u); a.src = u;
+  a.addEventListener('loadedmetadata', () => { a.currentTime = +edit?.p.start || 0; }, { once: true });
+}
+function markStart() { const a = $('#f-audio'); if (!a) return; $('#f-start').value = Math.round(a.currentTime * 2) / 2; a.pause(); toast('Start set to ' + fmt($('#f-start').value)); }
+async function pickSong(inp) {
+  const f = inp.files[0]; if (!f) return; readForm();
+  const buf = await f.arrayBuffer();
+  try { await decodeRaw(buf); } catch (e) { toast("That file couldn't be read as audio. Try an MP3 or M4A."); return; }
+  edit.p._song = { data: buf, type: f.type || 'audio/mpeg', name: f.name.replace(/\.[^.]+$/, '') };
+  edit.p.start = 0; renderEditor();
+}
+async function pickVoice(inp) { const f = inp.files[0]; if (!f) return; readForm(); edit.p._voice = { data: await f.arrayBuffer(), type: f.type || 'audio/mpeg', name: f.name }; renderEditor(); }
+async function toggleRec() {
+  if (recorder) { recorder.stop(); return; }
+  if (!navigator.mediaDevices || !window.MediaRecorder) return toast('Recording is not supported in this browser');
+  readForm();
+  try {
+    setSession('play-and-record');
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: true, autoGainControl: true } });
+    const mime = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find(m => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) || '';
+    const r = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined), chunks = [];
+    r.ondataavailable = e => e.data.size && chunks.push(e.data);
+    r.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop()); setSession('playback');
+      const blob = new Blob(chunks, { type: r.mimeType || mime || 'audio/mp4' }); recorder = null;
+      if (edit) { readForm(); edit.p._voice = { data: await blob.arrayBuffer(), type: blob.type, name: 'New recording' }; renderEditor(); }
+    };
+    recorder = r; r.start(); renderEditor();
+  } catch (e) { setSession('playback'); recorder = null; toast('Microphone not available: ' + e.message); }
+}
+function testAnn() {
+  readForm(); ac(); setSession('playback'); stopWalkup(.1);
+  const p = edit.p;
+  if (p.announce === 'voice') getVoice(p).then(b => b && playVoice(b, p.echo, () => {})).catch(() => toast('Could not play the recording'));
+  else speak(announceText(p), () => {});
+}
+function previewWalkup() { readForm(); playWalkup({ ...edit.p }); }
+async function savePlayer() {
+  readForm(); const p = edit.p, t = team();
+  if (!p.name) return toast('Enter the player name');
+  if (recorder) recorder.stop();
+  try {
+    if (p._song) { const id = uid(); await audioSet(id, p._song); if (p.songId) { await audioDel(p.songId); forgetAudio(p.songId); } p.songId = id; p.songName = p._song.name; delete p._song; }
+    if (p._voice) { const id = uid(); await audioSet(id, p._voice); if (p.voiceId) { await audioDel(p.voiceId); forgetAudio(p.voiceId); } p.voiceId = id; delete p._voice; }
+  } catch (e) { return toast('Could not save audio: ' + e.message); }
+  const i = t.players.findIndex(x => x.id === p.id);
+  if (i >= 0) t.players[i] = p; else { t.players.push(p); t.lineup.push(p.id); }
+  save(); closeSheet(); render(); toast('Saved ' + p.name);
+}
+async function deletePlayer() {
+  const p = edit.p; if (!confirm('Delete ' + (p.name || 'this player') + '?')) return;
+  const t = team(), orig = t.players.find(x => x.id === p.id);
+  t.players = t.players.filter(x => x.id !== p.id); cleanLineup(t);
+  if (orig) { await audioDel(orig.songId); await audioDel(orig.voiceId); forgetAudio(orig.songId); forgetAudio(orig.voiceId); }
+  save(); closeSheet(); render();
+}
+
+/* ---- sounds ---- */
+let sfxEdit = false;
+function renderSounds() {
+  const custom = S().sfx;
+  $('#v-sounds').innerHTML = `
+    <div class="tools" style="margin-top:4px"><button onclick="stopSfx()">■ Stop sound</button><button onclick="sfxEdit=!sfxEdit;renderSounds()">${sfxEdit ? '✓ Done editing' : '✏️ Edit my sounds'}</button></div>
+    <h3>Built-in</h3>
+    <div class="grid">${BUILTIN.map(b => `<div class="pad" data-id="${b.id}" onclick="playSfx('${b.id}')"><span>${b.emoji}</span>${esc(b.name)}</div>`).join('')}</div>
+    <h3>My sounds</h3>
+    <div class="grid ${sfxEdit ? 'editing' : ''}">${custom.map(s => `<div class="pad" data-id="${s.id}" onclick="${sfxEdit ? `editSfx('${s.id}')` : `playSfx('${s.id}')`}"><span>${esc(s.emoji || '🔊')}</span>${esc(s.name)}${sfxEdit ? '<small>tap to edit</small>' : ''}</div>`).join('')}
+      <div class="pad add" onclick="editSfx()"><span>＋</span>Add sound</div></div>
+    <p class="hint" style="margin-top:14px">Add clips like a strikeout song, home run horn, “Let's go!” chant, or between-innings music. Tap again to stop.</p>`;
+  markSfx();
+}
+let sx = null;
+function editSfx(id) {
+  const o = id && S().sfx.find(x => x.id === id);
+  sx = o ? { ...o } : { id: uid(), name: '', emoji: '🔊', audioId: null, vol: 100 }; sx.isNew = !o;
+  renderSfxEditor();
+}
+function renderSfxEditor() {
+  openSheet(`<div class="sheet-head"><button onclick="closeSheet()">Cancel</button><b>${sx.isNew ? 'Add Sound' : 'Edit Sound'}</b><button class="gold" onclick="saveSfx()">Save</button></div>
+    <div class="row"><label>Name<input id="s-name" value="${esc(sx.name)}" placeholder="e.g. Strikeout"></label><label class="sm">Emoji<input id="s-emo" value="${esc(sx.emoji)}" maxlength="4"></label></div>
+    <h3>Audio clip</h3>
+    <div class="songbox"><div class="nm">${sx._file ? esc(sx._file.name) : sx.audioId ? '✅ Clip saved' : '<span class="mut">No clip chosen</span>'}</div>
+      <label class="filebtn">Choose<input type="file" accept="audio/*" onchange="pickSfx(this)"></label></div>
+    <label>Volume <span class="vals" id="sv">${sx.vol}%</span><input id="s-vol" type="range" min="10" max="100" step="5" value="${sx.vol}" oninput="$('#sv').textContent=this.value+'%'"></label>
+    ${sx.isNew ? '' : '<button class="danger big" onclick="delSfx()">Delete sound</button>'}`);
+}
+function readSfx() { sx.name = $('#s-name').value.trim(); sx.emoji = $('#s-emo').value.trim() || '🔊'; sx.vol = +$('#s-vol').value; }
+async function pickSfx(inp) { const f = inp.files[0]; if (!f) return; readSfx(); sx._file = { data: await f.arrayBuffer(), type: f.type || 'audio/mpeg', name: f.name.replace(/\.[^.]+$/, '') }; if (!sx.name) sx.name = sx._file.name; renderSfxEditor(); }
+async function saveSfx() {
+  readSfx(); if (!sx.name) return toast('Give the sound a name');
+  if (!sx._file && !sx.audioId) return toast('Choose an audio clip');
+  if (sx._file) { const id = uid(); await audioSet(id, sx._file); if (sx.audioId) { await audioDel(sx.audioId); forgetAudio(sx.audioId); } sx.audioId = id; }
+  const { isNew, _file, ...clean } = sx, list = S().sfx, i = list.findIndex(x => x.id === clean.id);
+  if (i >= 0) list[i] = clean; else list.push(clean);
+  save(); closeSheet(); renderSounds();
+}
+async function delSfx() { if (!confirm('Delete this sound?')) return; S().sfx = S().sfx.filter(x => x.id !== sx.id); await audioDel(sx.audioId); forgetAudio(sx.audioId); save(); closeSheet(); renderSounds(); }
+
+/* ---- settings ---- */
+function voiceOptions() {
+  let vs = []; try { vs = speechSynthesis.getVoices().filter(v => /^en/i.test(v.lang)); } catch (e) {}
+  return `<option value="">Default voice</option>` + vs.map(v => `<option ${v.name === S().voice ? 'selected' : ''} value="${esc(v.name)}">${esc(v.name)} (${esc(v.lang)})</option>`).join('');
+}
+function renderSettings() {
+  const s = S(), t = team();
+  $('#v-settings').innerHTML = `
+    <div class="sec"><h3>Team</h3>
+      <label>Current team<select onchange="switchTeam(this.value)">${data.teams.map(x => `<option value="${x.id}" ${x.id === t.id ? 'selected' : ''}>${esc(x.name)} (${x.players.length})</option>`).join('')}</select></label>
+      <label>Team name<input value="${esc(t.name)}" onchange="team().name=this.value.trim()||'Team';save();render()"></label>
+      <div class="tools"><button onclick="addTeam()">+ New team</button>${data.teams.length > 1 ? '<button class="danger" onclick="delTeam()">Delete team</button>' : ''}</div></div>
+
+    <div class="sec"><h3>Announcer voice</h3>
+      <label>Voice<select onchange="S().voice=this.value;save()">${voiceOptions()}</select></label>
+      <label>Speed <span class="vals">${s.rate}</span><input type="range" min="0.5" max="1.3" step="0.05" value="${s.rate}" onchange="S().rate=+this.value;save();renderSettings()"></label>
+      <label>Pitch <span class="vals">${s.pitch}</span><input type="range" min="0.5" max="1.5" step="0.05" value="${s.pitch}" onchange="S().pitch=+this.value;save();renderSettings()"></label>
+      <label>What the announcer says<input value="${esc(s.template)}" onchange="S().template=this.value;save()"></label>
+      <p class="hint">Use {number}, {name}, {first} and {position}. Example: “Now batting, playing {position}, number {number}, {name}!”</p>
+      <button onclick="ac();setSession('playback');speak(announceText({name:'MJ Eubanks',number:'7',position:'shortstop'}),()=>{})">▶ Hear a sample</button></div>
+
+    <div class="sec"><h3>New player defaults</h3>
+      <label>Play length <span class="vals">${s.length ? s.length + ' sec' : 'Whole song'}</span><input type="range" min="0" max="60" step="1" value="${s.length}" onchange="S().length=+this.value;save();renderSettings()"></label>
+      <label>Fade out <span class="vals">${s.fadeOut} sec</span><input type="range" min="0" max="8" step="0.5" value="${s.fadeOut}" onchange="S().fadeOut=+this.value;save();renderSettings()"></label>
+      <label>Music level under announcement <span class="vals">${Math.round(s.duck * 100)}%</span><input type="range" min="0.05" max="0.6" step="0.05" value="${s.duck}" onchange="S().duck=+this.value;save();renderSettings()"></label></div>
+
+    <div class="sec"><h3>Backup &amp; move to another phone</h3>
+      <p class="hint">Everything (songs included) lives on this device. Make a backup file to keep it safe or to load it on another phone or iPad.</p>
+      <div class="tools"><button onclick="exportBackup()">⬇️ Save backup</button><label class="filebtn" style="flex:1;text-align:center;background:var(--card2);color:var(--text);font-weight:400">⬆️ Load backup<input type="file" accept=".json,application/json" onchange="importBackup(this)"></label></div>
+      <p class="hint" id="store"></p></div>
+
+    <div class="sec"><h3>Game-day tips</h3>
+      <p class="hint">• Add to Home Screen (Share → Add to Home Screen) so it opens full screen and works with no signal.<br>
+      • Turn your ringer/silent switch <b>off silent</b> on older iPhones, and turn the volume up.<br>
+      • Pair a Bluetooth speaker before the game, then tap Preview once to make sure sound comes out of it.<br>
+      • The screen stays awake while this app is open on the Game tab.</p></div>
+    <p class="hint" style="text-align:center">GS Baseball Walkout Songs</p>`;
+  storageInfo();
+}
+async function storageInfo() {
+  try { const e = await navigator.storage.estimate(); const el = $('#store'); if (el) el.textContent = `Using ${(e.usage / 1048576).toFixed(1)} MB on this device.`; } catch (e) {}
+}
+function switchTeam(id) { stopAll(); data.teamId = id; save(); render(); }
+function addTeam() { const n = prompt('Team name?'); if (!n) return; const t = newTeam(n.trim()); data.teams.push(t); data.teamId = t.id; save(); render(); }
+async function delTeam() {
+  const t = team(); if (!confirm(`Delete ${t.name} and all its players and songs?`)) return;
+  for (const p of t.players) { await audioDel(p.songId); await audioDel(p.voiceId); forgetAudio(p.songId); forgetAudio(p.voiceId); }
+  data.teams = data.teams.filter(x => x.id !== t.id); data.teamId = data.teams[0].id; save(); render();
+}
+
+/* ---- backup ---- */
+function abToB64(ab) { const u = new Uint8Array(ab); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); }
+function b64ToAb(b) { const s = atob(b), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u.buffer; }
+async function exportBackup() {
+  toast('Building backup…');
+  try {
+    const audio = {};
+    for (const k of await audioKeys()) { const r = await audioGet(k); if (r) audio[k] = { type: r.type, name: r.name, b64: abToB64(r.data) }; }
+    const json = JSON.stringify({ app: 'gs-walkout', v: 1, date: new Date().toISOString(), data, audio });
+    const name = 'gs-walkout-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+    const file = new File([json], name, { type: 'application/json' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: 'GS Walkout backup' }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 3000);
+  } catch (e) { toast('Backup failed: ' + e.message); }
+}
+async function importBackup(inp) {
+  const f = inp.files[0]; if (!f) return;
+  try {
+    const o = JSON.parse(await f.text());
+    if (o.app !== 'gs-walkout' || !o.data) throw new Error('Not a GS Walkout backup');
+    if (!confirm('Replace everything on this device with this backup?')) return;
+    stopAll(); await audioClear(); bufCache.clear(); clipCache.clear();
+    for (const [k, r] of Object.entries(o.audio || {})) await audioSet(k, { type: r.type, name: r.name, data: b64ToAb(r.b64) });
+    data = o.data; await kvSet('data', data); render(); toast('Backup loaded');
+  } catch (e) { toast('Could not load backup: ' + e.message); }
+  inp.value = '';
+}
+
+/* ---- sheet ---- */
+function openSheet(html) { const s = $('#sheet'); s.innerHTML = '<div class="sheet-card">' + html + '</div>'; s.classList.add('open'); document.body.style.overflow = 'hidden'; }
+function closeSheet() {
+  if (recorder) { try { recorder.stop(); } catch (e) {} }
+  if (edit) edit.urls.forEach(u => URL.revokeObjectURL(u));
+  edit = null; sx = null;
+  const s = $('#sheet'); s.classList.remove('open'); s.innerHTML = ''; document.body.style.overflow = '';
+}
+
+/* ---- keep screen awake ---- */
+let wake;
+async function keepAwake() { try { if ('wakeLock' in navigator && document.visibilityState === 'visible' && !wake) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => wake = null); } } catch (e) {} }
+document.addEventListener('visibilitychange', keepAwake);
+document.addEventListener('pointerdown', () => { keepAwake(); }, { passive: true });
+
+/* ============ boot ============ */
+(async () => {
+  setSession('playback');
+  try { data = await kvGet('data'); } catch (e) {}
+  if (!data || !data.teams || !data.teams.length) { data = defaultData(); save(); }
+  data.settings = { ...defaultData().settings, ...data.settings };
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
+  try { speechSynthesis.onvoiceschanged = () => view === 'settings' && renderSettings(); } catch (e) {}
+  render();
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+</body>
+</html>
