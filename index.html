@@ -716,7 +716,7 @@ function renderSettings() {
       <p class="hint">Use {number}, {name}, {first}, {position} and {team}. Use “...” for dramatic pauses. Example: “Now batting for the {team}... playing {position}... number {number}... {name}!”</p>
       <div class="tools"><button onclick="proSample()">▶ Hear a sample</button><button class="gold" onclick="makeAll(this)">Make all announcements</button></div>
       <p class="hint" id="proStat"></p>
-      <label>Announcer server <small>(only if you open the app from GitHub Pages)</small><input value="${esc(s.server)}" placeholder="https://gs-walkout.yourname.workers.dev" onchange="S().server=this.value.trim();proMem.clear();save()" autocapitalize="off" autocorrect="off"></label></div>
+      <label>Announcer server <small>(only if you open the app from GitHub Pages)</small><input value="${esc(s.server)}" placeholder="https://gsbaseballwalkout.yourname.workers.dev" onchange="S().server=this.value.trim();proMem.clear();save()" autocapitalize="off" autocorrect="off"></label></div>
 
     <div class="sec"><h3>📱 Phone voice <small>(backup, works with no internet)</small></h3>
       <label>Voice<select onchange="S().voice=this.value;save()">${voiceOptions()}</select></label>
