@@ -9,3 +9,10 @@ A BallparkDJ-style walkout (walk-up) song app for GS Baseball. Runs in the brows
 - **Multiple teams**, plus a backup file to move everything to another phone
 
 All songs stay on the device (IndexedDB); nothing is uploaded.
+
+## Pro announcer (Cloudflare)
+
+The pro announcer voice is made by a small Cloudflare Worker (`worker/index.js`) using Workers AI (Deepgram Aura-2), then run through a stadium P.A. effect on the phone. Each player's announcement is made once and saved on the device, so games work with no signal.
+
+Deploy: Cloudflare dashboard → Workers & Pages → Create → Import a repository → `GSBaseballWalkOut` → Deploy. `wrangler.jsonc` sets up the app files and the AI binding. The app is then at `https://gs-walkout.<your-subdomain>.workers.dev`.
+If you open the app from GitHub Pages instead, paste that workers.dev address into Settings → Announcer server.

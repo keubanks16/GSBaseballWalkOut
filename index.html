@@ -173,13 +173,14 @@ let data;
 const newTeam = name => ({ id: uid(), name, players: [], lineup: [], upNext: 0 });
 function defaultData() {
   const t = newTeam('Georgia Stingerz');
-  return { v: 1, teams: [t], teamId: t.id, settings: { voice: '', rate: 0.9, pitch: 1, template: 'Now batting, number {number}, {name}!', length: 15, fadeOut: 2, duck: 0.25, sfx: [] } };
+  return { v: 1, teams: [t], teamId: t.id, settings: { voice: '', rate: 0.9, pitch: 1, template: 'Now batting... number {number}... {name}!', length: 15, fadeOut: 2, duck: 0.25, sfx: [], speaker: 'zeus', pa: 'stadium', depth: 0.94, server: '' } };
 }
 const team = () => data.teams.find(t => t.id === data.teamId) || data.teams[0];
 const S = () => data.settings;
 let saveTimer;
 function save() { clearTimeout(saveTimer); saveTimer = setTimeout(() => kvSet('data', data).catch(e => toast('Save failed: ' + e.message)), 150); }
-function newPlayer() { const s = S(); return { id: uid(), name: '', number: '', position: '', songId: null, songName: '', start: 0, length: s.length, fadeOut: s.fadeOut, vol: 100, announce: 'tts', text: '', voiceId: null, echo: true, under: false }; }
+function newPlayer() { const s = S(); return { id: uid(), name: '', number: '', position: '', songId: null, songName: '', start: 0, length: s.length, fadeOut: s.fadeOut, vol: 100, announce: 'pro', text: '', voiceId: null, proId: null, proKey: '', echo: true, under: false }; }
+function findPlayer(id) { for (const t of data.teams) { const p = t.players.find(x => x.id === id); if (p) return p; } return null; }
 function cleanLineup(t) { t.lineup = t.lineup.filter(id => t.players.some(p => p.id === id)); if (t.upNext >= t.lineup.length) t.upNext = 0; }
 
 /* ============ audio engine ============ */
@@ -226,9 +227,9 @@ function findVoice(name) { try { return speechSynthesis.getVoices().find(v => v.
 function announceText(p) {
   if (p.text && p.text.trim()) return p.text.trim();
   let t = S().template || '{name}';
-  if (!String(p.number).trim()) t = t.replace(/number\s*\{number\}\s*,?\s*/i, '').replace(/\{number\}\s*,?\s*/g, '');
+  if (!String(p.number ?? '').trim()) t = t.replace(/number\s*\{number\}[\s,.…]*/i, '').replace(/\{number\}[\s,.…]*/g, '');
   const first = (p.name || '').split(' ')[0];
-  return t.replace(/\{number\}/g, p.number).replace(/\{name\}/g, p.name).replace(/\{first\}/g, first).replace(/\{position\}/g, p.position || '');
+  return t.replace(/\{number\}/g, p.number).replace(/\{name\}/g, p.name).replace(/\{first\}/g, first).replace(/\{position\}/g, p.position || '').replace(/\{team\}/g, (data && team().name) || '');
 }
 function speak(text, done) {
   done = once(done);
@@ -240,19 +241,70 @@ function speak(text, done) {
   speechSynthesis.cancel(); speechSynthesis.speak(u);
   setTimeout(done, 2500 + text.length * 110 / u.rate); // safety net if the browser never fires onend
 }
-function playVoice(buf, echo, done) {
-  done = once(done);
-  const src = ctx.createBufferSource(); src.buffer = buf;
-  const g = ctx.createGain(); g.gain.value = 1;
-  src.connect(g); g.connect(master);
-  if (echo) { // stadium P.A. echo
-    const d = ctx.createDelay(1), fb = ctx.createGain(), wet = ctx.createGain();
-    d.delayTime.value = 0.17; fb.gain.value = 0.33; wet.gain.value = 0.42;
-    g.connect(d); d.connect(fb); fb.connect(d); d.connect(wet); wet.connect(master);
-    setTimeout(() => { try { g.disconnect(d); } catch (e) {} }, (buf.duration + 3) * 1000);
-  }
+/* ---- stadium P.A. sound: EQ + compression + speaker slap-back + big-park reverb ---- */
+const IR = {};
+function impulse(sec, decay) {
+  const k = sec + '|' + decay; if (IR[k]) return IR[k];
+  const sr = ctx.sampleRate, n = Math.floor(sr * sec), b = ctx.createBuffer(2, n, sr);
+  for (let c = 0; c < 2; c++) { const d = b.getChannelData(c); for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, decay); }
+  return IR[k] = b;
+}
+function paChain(level, dur) {
+  const nodes = [], mk = n => (nodes.push(n), n), input = mk(ctx.createGain());
+  setTimeout(() => nodes.forEach(n => { try { n.disconnect(); } catch (e) {} }), (dur + 6) * 1000);
+  if (!level || level === 'off') { input.connect(master); return input; }
+  const big = level === 'stadium';
+  const f = (type, freq, gain, q) => { const b = mk(ctx.createBiquadFilter()); b.type = type; b.frequency.value = freq; if (gain != null) b.gain.value = gain; if (q) b.Q.value = q; return b; };
+  const hp = f('highpass', 110), boom = f('lowshelf', 190, 3.5), pres = f('peaking', 2800, 5, .9), lp = f('lowpass', big ? 7200 : 9000);
+  const comp = mk(ctx.createDynamicsCompressor()); comp.threshold.value = -28; comp.knee.value = 6; comp.ratio.value = 8; comp.attack.value = .003; comp.release.value = .2;
+  const out = mk(ctx.createGain()); out.gain.value = 1.45;
+  input.connect(hp); hp.connect(boom); boom.connect(pres); pres.connect(lp); lp.connect(comp); comp.connect(out); out.connect(master);
+  (big ? [[.13, .26], [.29, .16], [.47, .08]] : [[.09, .16], [.2, .07]]).forEach(([t, g]) => { const d = mk(ctx.createDelay(1)), a = mk(ctx.createGain()); d.delayTime.value = t; a.gain.value = g; out.connect(d); d.connect(a); a.connect(master); });
+  const cv = mk(ctx.createConvolver()), wet = mk(ctx.createGain()); cv.buffer = impulse(big ? 2.8 : 1.3, big ? 2.6 : 3.5); wet.gain.value = big ? .3 : .15;
+  out.connect(cv); cv.connect(wet); wet.connect(master);
+  return input;
+}
+function playVoice(buf, opts, done) {
+  done = once(done); opts = opts || {};
+  const src = ctx.createBufferSource(), rate = +opts.rate || 1; src.buffer = buf; src.playbackRate.value = rate;
+  src.connect(paChain(opts.pa, buf.duration / rate));
   src.onended = () => { if (voiceSrc === src) voiceSrc = null; done(); };
   voiceSrc = src; src.start();
+}
+const proOpts = () => ({ pa: S().pa, rate: +S().depth || 1 });
+const recOpts = p => ({ pa: p.echo ? (S().pa !== 'off' ? S().pa : 'field') : 'off' });
+
+/* ---- pro announcer: AI voice made once per player, saved on the phone for offline games ---- */
+const PRO_MEN = ['zeus', 'orion', 'atlas', 'apollo', 'arcas', 'aries', 'draco', 'hermes', 'hyperion', 'janus', 'jupiter', 'mars', 'neptune', 'odysseus', 'orpheus', 'pluto', 'saturn'];
+const PRO_WOMEN = ['athena', 'hera', 'luna', 'thalia', 'andromeda', 'asteria', 'aurora', 'helena', 'iris', 'juno', 'minerva', 'phoebe', 'vesta'];
+const proKey = p => (S().speaker || 'zeus') + '|' + announceText(p);
+const proReady = p => !!(p.proId && p.proKey === proKey(p));
+const proMem = new Map();
+function fetchPro(key, text) {
+  if (!proMem.has(key)) {
+    const pr = fetch((S().server || '').trim().replace(/\/$/, '') + '/api/announce', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, speaker: S().speaker || 'zeus' }) })
+      .then(async r => { if (!r.ok || !(r.headers.get('content-type') || '').includes('audio')) throw new Error('Pro announcer is not reachable'); return r.arrayBuffer(); });
+    proMem.set(key, pr); pr.catch(() => proMem.delete(key));
+    while (proMem.size > 40) proMem.delete(proMem.keys().next().value);
+  }
+  return proMem.get(key);
+}
+async function ensurePro(p) { // p = the saved player
+  const key = proKey(p); if (proReady(p)) return;
+  const ab = await fetchPro(key, announceText(p));
+  if (proKey(p) !== key || proReady(p)) return;
+  const id = uid(), old = p.proId;
+  await audioSet(id, { data: ab, type: 'audio/mpeg', name: 'Announcer' });
+  p.proId = id; p.proKey = key; save();
+  if (old) { audioDel(old); forgetAudio(old); }
+}
+async function getProBuf(p) {
+  const key = proKey(p);
+  if (proReady(p)) { const b = await getBuf(p.proId).catch(() => null); if (b) return b; }
+  const ab = await fetchPro(key, announceText(p));
+  const real = !p._preview && findPlayer(p.id);
+  if (real && proKey(real) === key) ensurePro(real).catch(() => {});
+  return decodeRaw(ab);
 }
 function startMusic(clip, p, duckLevel, deferEnd) {
   const now = ctx.currentTime + 0.02;
@@ -302,7 +354,8 @@ async function playWalkup(p) {
   const mode = p.announce || 'tts';
   let introDone; const introP = new Promise(r => introDone = once(r));
   if (mode === 'tts') speak(announceText(p), introDone);
-  else if (mode === 'voice' && (p.voiceId || p._voice)) getVoice(p).then(b => { if (tok !== playToken) return; b ? playVoice(b, p.echo, introDone) : introDone(); }).catch(introDone);
+  else if (mode === 'pro') getProBuf(p).then(b => { if (tok === playToken) playVoice(b, proOpts(), introDone); }).catch(() => { if (tok !== playToken) return; toast('Pro announcer offline – using phone voice'); speak(announceText(p), introDone); });
+  else if (mode === 'voice' && (p.voiceId || p._voice)) getVoice(p).then(b => { if (tok !== playToken) return; b ? playVoice(b, recOpts(p), introDone) : introDone(); }).catch(introDone);
   else introDone();
 
   if (p.under && mode !== 'none') {
@@ -438,7 +491,7 @@ function setUp(i) { team().upNext = i; save(); renderGame(); toast('Back to the 
 let preloading = false;
 async function preloadLineup() {
   if (preloading) return; preloading = true;
-  try { const t = team(); for (const id of [...t.lineup.slice(t.upNext), ...t.lineup.slice(0, t.upNext)].slice(0, 6)) { const p = t.players.find(x => x.id === id); if (p && p.songId) { ac(); await getClip(p).catch(() => {}); } } }
+  try { const t = team(); for (const id of [...t.lineup.slice(t.upNext), ...t.lineup.slice(0, t.upNext)].slice(0, 6)) { const p = t.players.find(x => x.id === id); if (!p) continue; if (p.announce === 'pro' && !proReady(p)) await ensurePro(p).catch(() => {}); if (p.songId) { ac(); await getClip(p).catch(() => {}); } } }
   finally { preloading = false; }
 }
 
@@ -468,7 +521,7 @@ function renderRoster() {
     ${t.players.length ? '' : '<p class="mut" style="text-align:center">No players yet.</p>'}
     ${t.players.map(p => `<div class="card" onclick="editPlayer('${p.id}')"><div class="jn">${esc(p.number) || '–'}</div>
       <div class="info"><b>${pName(p)}${p.position ? ` <small style="display:inline">· ${esc(p.position)}</small>` : ''}</b><small>${songLine(p)}</small>
-      <small>${p.announce === 'voice' ? '🎤 Your recording' : p.announce === 'none' ? '🔇 No announcement' : '🗣️ “' + esc(announceText(p)) + '”'}</small></div>
+      <small>${p.announce === 'pro' ? '🎙️ Pro: “' + esc(announceText(p)) + '”' : p.announce === 'voice' ? '🎤 Your recording' : p.announce === 'none' ? '🔇 No announcement' : '🗣️ “' + esc(announceText(p)) + '”'}</small></div>
       <button class="ghost" onclick="event.stopPropagation();playWalkup(team().players.find(x=>x.id==='${p.id}'))">▶</button></div>`).join('')}`;
 }
 
@@ -500,12 +553,13 @@ function renderEditor() {
 
     <h3>🎤 Announcement</h3>
     <div class="seg">
-      <label><input type="radio" name="f-ann" value="tts" ${mode === 'tts' ? 'checked' : ''} onchange="reEdit()">Announcer</label>
+      <label><input type="radio" name="f-ann" value="pro" ${mode === 'pro' ? 'checked' : ''} onchange="reEdit()">Pro</label>
+      <label><input type="radio" name="f-ann" value="tts" ${mode === 'tts' ? 'checked' : ''} onchange="reEdit()">Phone</label>
       <label><input type="radio" name="f-ann" value="voice" ${mode === 'voice' ? 'checked' : ''} onchange="reEdit()">My voice</label>
       <label><input type="radio" name="f-ann" value="none" ${mode === 'none' ? 'checked' : ''} onchange="reEdit()">None</label>
     </div>
-    ${mode === 'tts' ? `<label>What the announcer says<input id="f-text" value="${esc(p.text)}" placeholder="${esc(announceText({ ...p, text: '' }) || 'Now batting…')}"></label>
-      <p class="hint">Leave blank to use your template. Spell names how they sound if needed (e.g. “Kar-sin”).</p>
+    ${mode === 'tts' || mode === 'pro' ? `<label>What the announcer says<input id="f-text" value="${esc(p.text)}" placeholder="${esc(announceText({ ...p, text: '' }) || 'Now batting…')}"></label>
+      <p class="hint">${mode === 'pro' ? 'Pro announcer = stadium P.A. voice (change voice and sound in Settings). Use “...” for dramatic pauses. ' : 'Phone voice = your phone’s built-in voice (works with no internet). '}Leave blank to use your template. Spell names how they sound if needed (e.g. “Kar-sin”).</p>
       <button onclick="testAnn()">▶ Hear it</button>` : ''}
     ${mode === 'voice' ? `<div class="songbox" style="margin-top:10px"><div class="nm">${hasVoice ? '✅ ' + esc(p._voice ? p._voice.name : 'Recording saved') : '<span class="mut">No recording yet</span>'}</div>
         <button class="rec ${recorder ? 'live' : ''}" onclick="toggleRec()">${recorder ? '■ Stop' : '● Record'}</button></div>
@@ -571,10 +625,11 @@ async function toggleRec() {
 function testAnn() {
   readForm(); ac(); setSession('playback'); stopWalkup(.1);
   const p = edit.p;
-  if (p.announce === 'voice') getVoice(p).then(b => b && playVoice(b, p.echo, () => {})).catch(() => toast('Could not play the recording'));
+  if (p.announce === 'pro') { toast('Calling the announcer…', 1200); getProBuf({ ...p, _preview: true }).then(b => playVoice(b, proOpts(), () => {})).catch(e => toast(e.message)); }
+  else if (p.announce === 'voice') getVoice(p).then(b => b && playVoice(b, recOpts(p), () => {})).catch(() => toast('Could not play the recording'));
   else speak(announceText(p), () => {});
 }
-function previewWalkup() { readForm(); playWalkup({ ...edit.p }); }
+function previewWalkup() { readForm(); playWalkup({ ...edit.p, _preview: true }); }
 async function savePlayer() {
   readForm(); const p = edit.p, t = team();
   if (!p.name) return toast('Enter the player name');
@@ -586,12 +641,13 @@ async function savePlayer() {
   const i = t.players.findIndex(x => x.id === p.id);
   if (i >= 0) t.players[i] = p; else { t.players.push(p); t.lineup.push(p.id); }
   save(); closeSheet(); render(); toast('Saved ' + p.name);
+  if (p.announce === 'pro' && !proReady(p)) ensurePro(p).then(render).catch(() => toast('Announcement will be made next time you have signal'));
 }
 async function deletePlayer() {
   const p = edit.p; if (!confirm('Delete ' + (p.name || 'this player') + '?')) return;
   const t = team(), orig = t.players.find(x => x.id === p.id);
   t.players = t.players.filter(x => x.id !== p.id); cleanLineup(t);
-  if (orig) { await audioDel(orig.songId); await audioDel(orig.voiceId); forgetAudio(orig.songId); forgetAudio(orig.voiceId); }
+  if (orig) { for (const k of [orig.songId, orig.voiceId, orig.proId]) { await audioDel(k); forgetAudio(k); } }
   save(); closeSheet(); render();
 }
 
@@ -649,13 +705,24 @@ function renderSettings() {
       <label>Team name<input value="${esc(t.name)}" onchange="team().name=this.value.trim()||'Team';save();render()"></label>
       <div class="tools"><button onclick="addTeam()">+ New team</button>${data.teams.length > 1 ? '<button class="danger" onclick="delTeam()">Delete team</button>' : ''}</div></div>
 
-    <div class="sec"><h3>Announcer voice</h3>
+    <div class="sec"><h3>🎙️ Pro announcer</h3>
+      <label>Announcer<select onchange="S().speaker=this.value;save();renderSettings()">
+        <optgroup label="Men">${PRO_MEN.map(v => `<option value="${v}" ${v === s.speaker ? 'selected' : ''}>${v[0].toUpperCase() + v.slice(1)}</option>`).join('')}</optgroup>
+        <optgroup label="Women">${PRO_WOMEN.map(v => `<option value="${v}" ${v === s.speaker ? 'selected' : ''}>${v[0].toUpperCase() + v.slice(1)}</option>`).join('')}</optgroup></select></label>
+      <label>Ballpark sound<select onchange="S().pa=this.value;save()">
+        ${[['stadium', 'Big stadium P.A.'], ['field', 'Small field speakers'], ['off', 'Dry (no effect)']].map(([v, n]) => `<option value="${v}" ${v === s.pa ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+      <label>Voice depth <span class="vals">${s.depth >= 1 ? 'Natural' : Math.round((1 - s.depth) * 100) + '% deeper'}</span><input type="range" min="0.85" max="1" step="0.01" value="${s.depth}" onchange="S().depth=+this.value;save();renderSettings()"></label>
+      <label>What the announcer says<input value="${esc(s.template)}" onchange="S().template=this.value;save();renderSettings()"></label>
+      <p class="hint">Use {number}, {name}, {first}, {position} and {team}. Use “...” for dramatic pauses. Example: “Now batting for the {team}... playing {position}... number {number}... {name}!”</p>
+      <div class="tools"><button onclick="proSample()">▶ Hear a sample</button><button class="gold" onclick="makeAll(this)">Make all announcements</button></div>
+      <p class="hint" id="proStat"></p>
+      <label>Announcer server <small>(only if you open the app from GitHub Pages)</small><input value="${esc(s.server)}" placeholder="https://gs-walkout.yourname.workers.dev" onchange="S().server=this.value.trim();proMem.clear();save()" autocapitalize="off" autocorrect="off"></label></div>
+
+    <div class="sec"><h3>📱 Phone voice <small>(backup, works with no internet)</small></h3>
       <label>Voice<select onchange="S().voice=this.value;save()">${voiceOptions()}</select></label>
       <label>Speed <span class="vals">${s.rate}</span><input type="range" min="0.5" max="1.3" step="0.05" value="${s.rate}" onchange="S().rate=+this.value;save();renderSettings()"></label>
       <label>Pitch <span class="vals">${s.pitch}</span><input type="range" min="0.5" max="1.5" step="0.05" value="${s.pitch}" onchange="S().pitch=+this.value;save();renderSettings()"></label>
-      <label>What the announcer says<input value="${esc(s.template)}" onchange="S().template=this.value;save()"></label>
-      <p class="hint">Use {number}, {name}, {first} and {position}. Example: “Now batting, playing {position}, number {number}, {name}!”</p>
-      <button onclick="ac();setSession('playback');speak(announceText({name:'MJ Eubanks',number:'7',position:'shortstop'}),()=>{})">▶ Hear a sample</button></div>
+      <button onclick="ac();setSession('playback');speak(announceText({name:'MJ Eubanks',number:'7',position:'shortstop'}),()=>{})">▶ Hear phone voice</button></div>
 
     <div class="sec"><h3>New player defaults</h3>
       <label>Play length <span class="vals">${s.length ? s.length + ' sec' : 'Whole song'}</span><input type="range" min="0" max="60" step="1" value="${s.length}" onchange="S().length=+this.value;save();renderSettings()"></label>
@@ -673,7 +740,25 @@ function renderSettings() {
       • Pair a Bluetooth speaker before the game, then tap Preview once to make sure sound comes out of it.<br>
       • The screen stays awake while this app is open on the Game tab.</p></div>
     <p class="hint" style="text-align:center">GS Baseball Walkout Songs</p>`;
-  storageInfo();
+  storageInfo(); proStatus();
+}
+function proStatus() {
+  const el = $('#proStat'); if (!el) return;
+  const ps = team().players.filter(p => p.announce === 'pro'); if (!ps.length) { el.textContent = ''; return; }
+  const n = ps.filter(proReady).length;
+  el.textContent = n === ps.length ? `✅ All ${n} announcements saved on this phone — ready with no signal.` : `${n} of ${ps.length} announcements saved. Tap “Make all announcements” before you get to the field.`;
+}
+function proSample() {
+  ac(); setSession('playback'); stopWalkup(.1); toast('Calling the announcer…', 1200);
+  getProBuf({ id: 'sample', _preview: true, name: 'MJ Eubanks', number: '7', position: 'shortstop' }).then(b => playVoice(b, proOpts(), () => {})).catch(e => toast(e.message));
+}
+async function makeAll(btn) {
+  const ps = team().players.filter(p => p.announce === 'pro' && !proReady(p));
+  if (!ps.length) { toast('All announcements are ready'); return; }
+  btn.disabled = true; let ok = 0;
+  for (const p of ps) { btn.textContent = `Making ${ok + 1} of ${ps.length}…`; try { await ensurePro(p); ok++; } catch (e) { toast(e.message); break; } }
+  btn.disabled = false; btn.textContent = 'Make all announcements'; proStatus();
+  if (ok) toast(`Made ${ok} announcement${ok > 1 ? 's' : ''}`);
 }
 async function storageInfo() {
   try { const e = await navigator.storage.estimate(); const el = $('#store'); if (el) el.textContent = `Using ${(e.usage / 1048576).toFixed(1)} MB on this device.`; } catch (e) {}
@@ -682,7 +767,7 @@ function switchTeam(id) { stopAll(); data.teamId = id; save(); render(); }
 function addTeam() { const n = prompt('Team name?'); if (!n) return; const t = newTeam(n.trim()); data.teams.push(t); data.teamId = t.id; save(); render(); }
 async function delTeam() {
   const t = team(); if (!confirm(`Delete ${t.name} and all its players and songs?`)) return;
-  for (const p of t.players) { await audioDel(p.songId); await audioDel(p.voiceId); forgetAudio(p.songId); forgetAudio(p.voiceId); }
+  for (const p of t.players) for (const k of [p.songId, p.voiceId, p.proId]) { await audioDel(k); forgetAudio(k); }
   data.teams = data.teams.filter(x => x.id !== t.id); data.teamId = data.teams[0].id; save(); render();
 }
 
@@ -737,6 +822,11 @@ document.addEventListener('pointerdown', () => { keepAwake(); }, { passive: true
   try { data = await kvGet('data'); } catch (e) {}
   if (!data || !data.teams || !data.teams.length) { data = defaultData(); save(); }
   data.settings = { ...defaultData().settings, ...data.settings };
+  if (!data.settings.v2) { // switch existing players to the pro announcer
+    data.teams.forEach(t => t.players.forEach(p => { if (!p.announce || p.announce === 'tts') p.announce = 'pro'; }));
+    if (data.settings.template === 'Now batting, number {number}, {name}!') data.settings.template = 'Now batting... number {number}... {name}!';
+    data.settings.v2 = true; save();
+  }
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
   try { speechSynthesis.onvoiceschanged = () => view === 'settings' && renderSettings(); } catch (e) {}
   render();
