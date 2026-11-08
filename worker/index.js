@@ -45,9 +45,19 @@ async function aura(env, text, voice) {
   return toAudio(await env.AI.run('@cf/deepgram/aura-2-en', { text: text.replace(/\[[^\]]*\]/g, '').trim(), speaker: AURA.has(voice) ? voice : 'zeus' }));
 }
 
+// Read-only copy of the coach's current game from the Dugout Lineup app (batting order, roster, who's up).
+async function dugout(env, search) {
+  try {
+    const path = '/api/state' + (search || '');
+    const r = env.DUGOUT ? await env.DUGOUT.fetch('https://dugoutlineup' + path) : await fetch('https://dugoutlineup.kollinmeubanks.workers.dev' + path);
+    return new Response(r.body, { status: r.status, headers: { ...CORS, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+  } catch (e) { return err('Dugout Lineup is not reachable', 502); }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname === '/api/dugout') return dugout(env, url.search);
     if (url.pathname !== '/api/announce') return env.ASSETS.fetch(request);
     if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
     if (request.method !== 'POST') return err('POST only', 405);

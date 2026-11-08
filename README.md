@@ -16,3 +16,7 @@ The pro announcer uses ElevenLabs v3 through Cloudflare AI Gateway (paid with AI
 
 Deploy: Cloudflare dashboard → Workers & Pages → Create → Import a repository → `GSBaseballWalkOut` → Deploy. `wrangler.jsonc` sets up the app files and the AI binding. The app is then at `https://gsbaseballwalkout.<your-subdomain>.workers.dev`.
 If you open the app from GitHub Pages instead, paste that workers.dev address into Settings → Announcer server.
+
+## Dugout Lineup link
+
+The batting order, player names/numbers and who's up next come from the Dugout Lineup app (keubanks16/DugoutLineup). The Worker reads the coach's game through a service binding (`DUGOUT` → `dugoutlineup`) at `/api/dugout`; the app checks every few seconds on the Game tab. Turn it off or pick the team in Settings → Dugout Lineup.

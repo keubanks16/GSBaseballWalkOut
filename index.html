@@ -105,6 +105,9 @@ audio{width:100%;margin-top:10px}
 @keyframes pulse{50%{opacity:.55}}
 .toast{position:fixed;left:50%;top:calc(70px + env(safe-area-inset-top));transform:translateX(-50%);background:#222;border:1px solid var(--gold);padding:10px 16px;border-radius:12px;z-index:50;font-size:14px;max-width:90%;text-align:center}
 .vals{float:right;color:var(--gold)}
+.dg{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--mut)}
+.dg span{flex:1}
+.dg button{padding:7px 12px;font-size:13px}
 </style>
 </head>
 <body>
@@ -173,7 +176,7 @@ let data;
 const newTeam = name => ({ id: uid(), name, players: [], lineup: [], upNext: 0 });
 function defaultData() {
   const t = newTeam('Georgia Stingerz');
-  return { v: 1, teams: [t], teamId: t.id, settings: { voice: '', rate: 0.9, pitch: 1, template: 'Now batting... number {number}... {name}!', length: 15, fadeOut: 2, duck: 0.25, sfx: [], speaker: 'zeus', pa: 'stadium', depth: 1, server: '', engine: 'pro', elVoice: 'nPczCjzI2devNBz1zQrb', elCustom: '', style: 'hype' } };
+  return { v: 1, teams: [t], teamId: t.id, settings: { voice: '', rate: 0.9, pitch: 1, template: 'Now batting... number {number}... {name}!', length: 15, fadeOut: 2, duck: 0.25, sfx: [], speaker: 'zeus', pa: 'stadium', depth: 1, server: '', engine: 'pro', elVoice: 'nPczCjzI2devNBz1zQrb', elCustom: '', style: 'hype', dugout: { on: true, teamId: null, v: 0, batIdx: null, at: 0, err: '' } } };
 }
 const team = () => data.teams.find(t => t.id === data.teamId) || data.teams[0];
 const S = () => data.settings;
@@ -472,6 +475,7 @@ function go(v) {
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
   document.querySelectorAll('.view').forEach(s => s.classList.toggle('on', s.id === 'v-' + v));
   render(); window.scrollTo(0, 0);
+  if (v === 'game') syncDugout();
 }
 function render() {
   $('#teamName').textContent = team().name;
@@ -485,7 +489,7 @@ function renderGame() {
   const t = team(); cleanLineup(t);
   const el = $('#v-game');
   if (!t.players.length) {
-    el.innerHTML = `<div class="empty"><div style="font-size:48px">⚾🎶</div><h2>Let's set up your walkout songs</h2><p>Add each player, pick their song, and choose where it starts. Then run the lineup on game day from this screen.</p><button class="gold big" onclick="editPlayer()">+ Add your first player</button></div>`;
+    el.innerHTML = `<div class="empty"><div style="font-size:48px">⚾🎶</div><h2>Let's set up your walkout songs</h2><p>Add each player, pick their song, and choose where it starts. Then run the lineup on game day from this screen.</p><button class="gold big" onclick="editPlayer()">+ Add your first player</button>${dgLinked(t) ? '<button class="big" onclick="syncDugout(true)">🔗 Get lineup from Dugout Lineup</button>' : ''}</div>`;
     return;
   }
   const L = t.lineup.map(id => t.players.find(p => p.id === id));
@@ -494,6 +498,7 @@ function renderGame() {
   el.innerHTML = `
     ${up ? `<button class="nextbtn" onclick="playNext()"><div class="ic">▶</div><div><small>NEXT UP · BATTING ${t.upNext + 1}</small><big>${up.number !== '' ? '#' + esc(up.number) + ' ' : ''}${pName(up)}</big></div></button>`
          : `<div class="empty"><p>No one is in the batting order yet.</p></div>`}
+    ${dgLinked(t) ? `<div class="dg"><span id="dgStat">${dgStatus()}</span><button onclick="syncDugout(true)">↻ Sync</button></div>` : ''}
     <div class="tools"><button onclick="openLineup()">✏️ Batting order</button><button onclick="setUp(0)">⏮ Top of order</button></div>
     ${L.map((p, i) => `<div class="card ${i === t.upNext ? 'up' : ''}" data-id="${p.id}" onclick="playAt(${i})">
         <div class="ord">${i + 1}</div><div class="jn">${esc(p.number) || '–'}</div>
@@ -521,6 +526,7 @@ function openLineup() {
   const t = team(); cleanLineup(t);
   const L = t.lineup.map(id => t.players.find(p => p.id === id)), bench = t.players.filter(p => !t.lineup.includes(p.id));
   openSheet(`<div class="sheet-head"><span style="width:60px"></span><b>Batting Order</b><button class="gold" onclick="closeSheet();render()">Done</button></div>
+    ${dgLinked(t) ? '<p class="hint">🔗 This order comes from Dugout Lineup. When the coach changes it there, it updates here automatically.</p>' : ''}
     ${L.length ? '' : '<p class="mut">Add players from the bench below.</p>'}
     ${L.map((p, i) => `<div class="lu"><div class="ord">${i + 1}</div><div class="info"><b>${p.number !== '' ? '#' + esc(p.number) + ' ' : ''}${pName(p)}</b></div>
       <button onclick="luMove(${i},-1)" ${i ? '' : 'disabled'}>↑</button><button onclick="luMove(${i},1)" ${i < L.length - 1 ? '' : 'disabled'}>↓</button><button onclick="luSit('${p.id}')" aria-label="Move to bench">✕</button></div>`).join('')}
@@ -726,6 +732,11 @@ function renderSettings() {
       <label>Team name<input value="${esc(t.name)}" onchange="team().name=this.value.trim()||'Team';save();render()"></label>
       <div class="tools"><button onclick="addTeam()">+ New team</button>${data.teams.length > 1 ? '<button class="danger" onclick="delTeam()">Delete team</button>' : ''}</div></div>
 
+    <div class="sec"><h3>🔗 Dugout Lineup</h3>
+      <label class="check"><div>Get the batting order from Dugout Lineup<br><small>Players, numbers, order and who's up next follow the coach's Dugout Lineup app.</small></div><input type="checkbox" ${s.dugout.on ? 'checked' : ''} onchange="S().dugout.on=this.checked;S().dugout.v=0;save();renderSettings();this.checked&&syncDugout(true)"></label>
+      ${s.dugout.on ? `<label>Use it for this team<select onchange="S().dugout.teamId=this.value;S().dugout.v=0;save();syncDugout(true)">${data.teams.map(x => `<option value="${x.id}" ${x.id === dgTeam().id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>
+      <div class="tools"><button onclick="syncDugout(true)">↻ Sync now</button></div><p class="hint" id="dgStat">${dgStatus()}</p>` : ''}</div>
+
     <div class="sec"><h3>🎙️ Pro announcer</h3>
       <label>Announcer type<select onchange="S().engine=this.value;save();renderSettings()">
         <option value="pro" ${!isBasic() ? 'selected' : ''}>Pro (ElevenLabs – most realistic)</option>
@@ -846,6 +857,71 @@ async function keepAwake() { try { if ('wakeLock' in navigator && document.visib
 document.addEventListener('visibilitychange', keepAwake);
 document.addEventListener('pointerdown', () => { keepAwake(); }, { passive: true });
 
+/* ============ Dugout Lineup link ============ */
+const DUGOUT_URL = 'https://dugoutlineup.kollinmeubanks.workers.dev';
+const dgTeam = () => data.teams.find(x => x.id === S().dugout.teamId) || data.teams[0];
+const dgLinked = t => !!(S().dugout && S().dugout.on && dgTeam().id === t.id);
+const norm = s => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+function dgStatus() {
+  const D = S().dugout;
+  if (D.err) return '⚠️ Can’t reach Dugout Lineup — using the last lineup';
+  if (!D.at) return '🔗 Linked to Dugout Lineup';
+  const m = Math.round((Date.now() - D.at) / 60000);
+  return '🔗 Synced with Dugout Lineup ' + (m < 1 ? 'just now' : m + ' min ago');
+}
+function paintDugout() { document.querySelectorAll('#dgStat').forEach(el => el.textContent = dgStatus()); }
+async function fetchDugout(v) {
+  const q = '?v=' + (v || 0);
+  try { // through this app's own server (no cross-site limits)
+    const r = await fetch('api/dugout' + q, { cache: 'no-store' });
+    if (r.ok && (r.headers.get('content-type') || '').includes('json')) return await r.json();
+  } catch (e) {}
+  const r = await fetch(DUGOUT_URL + '/api/state' + q, { cache: 'no-store' });
+  if (!r.ok) throw new Error('Dugout Lineup is not reachable');
+  return r.json();
+}
+let dgBusy = false;
+async function syncDugout(manual) {
+  const D = S().dugout; if (!D || !D.on || dgBusy) return;
+  dgBusy = true;
+  try {
+    const j = await fetchDugout(manual ? 0 : D.v);
+    D.at = Date.now(); D.err = '';
+    if (!j.same && j.state) { D.v = j.v; applyDugout(dgTeam(), j.state, manual); }
+    else if (manual) toast(j.state === null ? 'No lineup in Dugout Lineup yet' : 'Lineup is up to date');
+  } catch (e) { D.err = e.message || 'offline'; if (manual) toast(D.err); }
+  finally { dgBusy = false; save(); paintDugout(); }
+}
+function applyDugout(t, st, manual) {
+  const D = S().dugout, map = {}, used = new Set();
+  let added = 0, renamed = 0;
+  for (const d of (st.roster || []).filter(x => x && x.id)) {
+    const name = String(d.name || '').trim(), num = String(d.num ?? '').trim();
+    let p = t.players.find(x => x.dugoutId === d.id);
+    if (!p && norm(name)) p = t.players.find(x => !used.has(x.id) && !x.dugoutId && norm(x.name) === norm(name));
+    if (!p && num) { const c = t.players.filter(x => !used.has(x.id) && !x.dugoutId && String(x.number).trim() === num); if (c.length === 1) p = c[0]; }
+    if (!p && (!name || /^Player \d+$/i.test(name))) continue; // Dugout's blank placeholder players
+    if (!p) { p = newPlayer(); p.name = name; p.number = num; t.players.push(p); added++; }
+    if (name && p.name !== name) { p.name = name; renamed++; }
+    p.number = num; p.dugoutId = d.id;
+    used.add(p.id); map[d.id] = p.id;
+  }
+  const before = t.lineup.join();
+  const order = (st.order || []).map(id => map[id]).filter(Boolean);
+  if (order.length) t.lineup = order;
+  // follow the coach's "now batting" only when it changes in Dugout, so tapping Next here isn't undone
+  const bi = Number(st.batIdx) || 0, so = st.order || [];
+  const curId = so.length ? map[so[bi % so.length]] : null;
+  if (D.batIdx !== bi || before !== t.lineup.join()) { const k = t.lineup.indexOf(curId); t.upNext = k < 0 ? 0 : k; }
+  D.batIdx = bi;
+  cleanLineup(t);
+  if (before !== t.lineup.join() || added || renamed || manual)
+    toast('🔗 Lineup updated from Dugout' + (added ? ` · ${added} new player${added > 1 ? 's' : ''} need${added > 1 ? '' : 's'} a song` : ''), 3000);
+  render();
+}
+setInterval(() => { if (document.visibilityState === 'visible' && view === 'game' && !$('#sheet').classList.contains('open')) syncDugout(); }, 8000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncDugout(); });
+
 /* ============ boot ============ */
 (async () => {
   setSession('playback');
@@ -860,7 +936,7 @@ document.addEventListener('pointerdown', () => { keepAwake(); }, { passive: true
   if (!data.settings.v3) { data.settings.engine = 'pro'; data.settings.depth = 1; data.settings.v3 = true; save(); }
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
   try { speechSynthesis.onvoiceschanged = () => view === 'settings' && renderSettings(); } catch (e) {}
-  render();
+  render(); syncDugout();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
 </script>

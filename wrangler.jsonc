@@ -3,5 +3,7 @@
   "main": "worker/index.js",
   "compatibility_date": "2026-11-01",
   "assets": { "directory": "./", "binding": "ASSETS" },
-  "ai": { "binding": "AI" }
+  "ai": { "binding": "AI" },
+  // Reads the batting order from the Dugout Lineup app's Worker.
+  "services": [{ "binding": "DUGOUT", "service": "dugoutlineup" }]
 }
