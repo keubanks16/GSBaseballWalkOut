@@ -173,7 +173,7 @@ let data;
 const newTeam = name => ({ id: uid(), name, players: [], lineup: [], upNext: 0 });
 function defaultData() {
   const t = newTeam('Georgia Stingerz');
-  return { v: 1, teams: [t], teamId: t.id, settings: { voice: '', rate: 0.9, pitch: 1, template: 'Now batting... number {number}... {name}!', length: 15, fadeOut: 2, duck: 0.25, sfx: [], speaker: 'zeus', pa: 'stadium', depth: 0.94, server: '' } };
+  return { v: 1, teams: [t], teamId: t.id, settings: { voice: '', rate: 0.9, pitch: 1, template: 'Now batting... number {number}... {name}!', length: 15, fadeOut: 2, duck: 0.25, sfx: [], speaker: 'zeus', pa: 'stadium', depth: 1, server: '', engine: 'pro', elVoice: 'nPczCjzI2devNBz1zQrb', elCustom: '', style: 'hype' } };
 }
 const team = () => data.teams.find(t => t.id === data.teamId) || data.teams[0];
 const S = () => data.settings;
@@ -277,13 +277,34 @@ const recOpts = p => ({ pa: p.echo ? (S().pa !== 'off' ? S().pa : 'field') : 'of
 /* ---- pro announcer: AI voice made once per player, saved on the phone for offline games ---- */
 const PRO_MEN = ['zeus', 'orion', 'atlas', 'apollo', 'arcas', 'aries', 'draco', 'hermes', 'hyperion', 'janus', 'jupiter', 'mars', 'neptune', 'odysseus', 'orpheus', 'pluto', 'saturn'];
 const PRO_WOMEN = ['athena', 'hera', 'luna', 'thalia', 'andromeda', 'asteria', 'aurora', 'helena', 'iris', 'juno', 'minerva', 'phoebe', 'vesta'];
-const proKey = p => (S().speaker || 'zeus') + '|' + announceText(p);
+const EL_VOICES = [['nPczCjzI2devNBz1zQrb', 'Brian – deep, resonant'], ['pNInz6obpgDQGcFmaJgB', 'Adam – deep, American'], ['pqHfZKP75CvOlQylNhV4', 'Bill – classic broadcaster'],
+  ['2EiwWnXFnvU5JabPnv8n', 'Clyde – gravelly, intense'], ['CwhRBWXzGAHq8TQ4Fs17', 'Roger – confident'], ['cjVigY5qzO86Huf0OWal', 'Eric – smooth'], ['iP95p4xoKVk53GoZ742B', 'Chris – easygoing']];
+const isBasic = () => S().engine === 'basic';
+const elVoice = () => (S().elCustom || '').trim() || S().elVoice || EL_VOICES[0][0];
+// How the text is sent to the announcer. "Hype" adds ElevenLabs delivery tags and punches the last name.
+function proText(p) {
+  let t = announceText(p);
+  if (isBasic() || S().style !== 'hype') return t;
+  if (!(p.text && p.text.trim()) && p.name) {
+    const parts = p.name.trim().split(/\s+/), last = parts.pop(), first = parts.join(' ');
+    const big = last.length > 2 ? last.toUpperCase() : last;
+    t = t.split(p.name).join(first ? first + '... ' + big : big);
+  }
+  return /^\s*\[/.test(t) ? t : '[stadium announcer, booming, excited] ' + t;
+}
+const proKey = p => (isBasic() ? 'basic|' + (S().speaker || 'zeus') : 'el|' + elVoice() + '|' + S().style) + '|' + proText(p);
 const proReady = p => !!(p.proId && p.proKey === proKey(p));
 const proMem = new Map();
 function fetchPro(key, text) {
   if (!proMem.has(key)) {
-    const pr = fetch((S().server || '').trim().replace(/\/$/, '') + '/api/announce', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, speaker: S().speaker || 'zeus' }) })
-      .then(async r => { if (!r.ok || !(r.headers.get('content-type') || '').includes('audio')) throw new Error('Pro announcer is not reachable'); return r.arrayBuffer(); });
+    const pr = fetch((S().server || '').trim().replace(/\/$/, '') + '/api/announce', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, engine: isBasic() ? 'basic' : 'pro', voice: isBasic() ? S().speaker : elVoice(), style: S().style }) })
+      .then(async r => {
+        const ct = r.headers.get('content-type') || '';
+        if (r.ok && ct.includes('audio')) return r.arrayBuffer();
+        let m = 'Pro announcer is not reachable — open the app from its Cloudflare address';
+        if (ct.includes('json')) { try { m = (await r.json()).error || m; } catch (e) {} }
+        throw new Error(m);
+      });
     proMem.set(key, pr); pr.catch(() => proMem.delete(key));
     while (proMem.size > 40) proMem.delete(proMem.keys().next().value);
   }
@@ -291,7 +312,7 @@ function fetchPro(key, text) {
 }
 async function ensurePro(p) { // p = the saved player
   const key = proKey(p); if (proReady(p)) return;
-  const ab = await fetchPro(key, announceText(p));
+  const ab = await fetchPro(key, proText(p));
   if (proKey(p) !== key || proReady(p)) return;
   const id = uid(), old = p.proId;
   await audioSet(id, { data: ab, type: 'audio/mpeg', name: 'Announcer' });
@@ -301,7 +322,7 @@ async function ensurePro(p) { // p = the saved player
 async function getProBuf(p) {
   const key = proKey(p);
   if (proReady(p)) { const b = await getBuf(p.proId).catch(() => null); if (b) return b; }
-  const ab = await fetchPro(key, announceText(p));
+  const ab = await fetchPro(key, proText(p));
   const real = !p._preview && findPlayer(p.id);
   if (real && proKey(real) === key) ensurePro(real).catch(() => {});
   return decodeRaw(ab);
@@ -559,7 +580,7 @@ function renderEditor() {
       <label><input type="radio" name="f-ann" value="none" ${mode === 'none' ? 'checked' : ''} onchange="reEdit()">None</label>
     </div>
     ${mode === 'tts' || mode === 'pro' ? `<label>What the announcer says<input id="f-text" value="${esc(p.text)}" placeholder="${esc(announceText({ ...p, text: '' }) || 'Now batting…')}"></label>
-      <p class="hint">${mode === 'pro' ? 'Pro announcer = stadium P.A. voice (change voice and sound in Settings). Use “...” for dramatic pauses. ' : 'Phone voice = your phone’s built-in voice (works with no internet). '}Leave blank to use your template. Spell names how they sound if needed (e.g. “Kar-sin”).</p>
+      <p class="hint">${mode === 'pro' ? 'Pro announcer = stadium P.A. voice (change voice and sound in Settings). Use “...” for dramatic pauses. ' : 'Phone voice = your phone’s built-in voice (works with no internet). '}Leave blank to use your template. Spell names how they sound if needed (e.g. “Jay-den”).</p>
       <button onclick="testAnn()">▶ Hear it</button>` : ''}
     ${mode === 'voice' ? `<div class="songbox" style="margin-top:10px"><div class="nm">${hasVoice ? '✅ ' + esc(p._voice ? p._voice.name : 'Recording saved') : '<span class="mut">No recording yet</span>'}</div>
         <button class="rec ${recorder ? 'live' : ''}" onclick="toggleRec()">${recorder ? '■ Stop' : '● Record'}</button></div>
@@ -706,14 +727,23 @@ function renderSettings() {
       <div class="tools"><button onclick="addTeam()">+ New team</button>${data.teams.length > 1 ? '<button class="danger" onclick="delTeam()">Delete team</button>' : ''}</div></div>
 
     <div class="sec"><h3>🎙️ Pro announcer</h3>
-      <label>Announcer<select onchange="S().speaker=this.value;save();renderSettings()">
+      <label>Announcer type<select onchange="S().engine=this.value;save();renderSettings()">
+        <option value="pro" ${!isBasic() ? 'selected' : ''}>Pro (ElevenLabs – most realistic)</option>
+        <option value="basic" ${isBasic() ? 'selected' : ''}>Basic (included with Cloudflare)</option></select></label>
+      ${isBasic() ? `<label>Voice<select onchange="S().speaker=this.value;save();renderSettings()">
         <optgroup label="Men">${PRO_MEN.map(v => `<option value="${v}" ${v === s.speaker ? 'selected' : ''}>${v[0].toUpperCase() + v.slice(1)}</option>`).join('')}</optgroup>
-        <optgroup label="Women">${PRO_WOMEN.map(v => `<option value="${v}" ${v === s.speaker ? 'selected' : ''}>${v[0].toUpperCase() + v.slice(1)}</option>`).join('')}</optgroup></select></label>
+        <optgroup label="Women">${PRO_WOMEN.map(v => `<option value="${v}" ${v === s.speaker ? 'selected' : ''}>${v[0].toUpperCase() + v.slice(1)}</option>`).join('')}</optgroup></select></label>`
+      : `<label>Voice<select onchange="S().elVoice=this.value;save();renderSettings()">${EL_VOICES.map(([id, n]) => `<option value="${id}" ${id === s.elVoice ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+      <label>Delivery<select onchange="S().style=this.value;save();renderSettings()">
+        <option value="hype" ${s.style === 'hype' ? 'selected' : ''}>Hype – booming stadium call</option>
+        <option value="classic" ${s.style !== 'hype' ? 'selected' : ''}>Classic – smooth and steady</option></select></label>
+      <label>Custom voice ID <small>(optional)</small><input value="${esc(s.elCustom)}" placeholder="Paste a voice ID from the ElevenLabs Voice Library" autocapitalize="off" autocorrect="off" onchange="S().elCustom=this.value.trim();save();renderSettings()"></label>
+      <p class="hint">Want an exact stadium announcer sound? Search “stadium announcer” in the ElevenLabs Voice Library, copy the voice ID, and paste it here.</p>`}
       <label>Ballpark sound<select onchange="S().pa=this.value;save()">
         ${[['stadium', 'Big stadium P.A.'], ['field', 'Small field speakers'], ['off', 'Dry (no effect)']].map(([v, n]) => `<option value="${v}" ${v === s.pa ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
       <label>Voice depth <span class="vals">${s.depth >= 1 ? 'Natural' : Math.round((1 - s.depth) * 100) + '% deeper'}</span><input type="range" min="0.85" max="1" step="0.01" value="${s.depth}" onchange="S().depth=+this.value;save();renderSettings()"></label>
       <label>What the announcer says<input value="${esc(s.template)}" onchange="S().template=this.value;save();renderSettings()"></label>
-      <p class="hint">Use {number}, {name}, {first}, {position} and {team}. Use “...” for dramatic pauses. Example: “Now batting for the {team}... playing {position}... number {number}... {name}!”</p>
+      <p class="hint">Use {number}, {name}, {first}, {position} and {team}. Use “...” for dramatic pauses. Pro voices also understand tags like [shouting] or [excited]. Example: “Now batting for the {team}... playing {position}... number {number}... {name}!”</p>
       <div class="tools"><button onclick="proSample()">▶ Hear a sample</button><button class="gold" onclick="makeAll(this)">Make all announcements</button></div>
       <p class="hint" id="proStat"></p>
       <label>Announcer server <small>(only if you open the app from GitHub Pages)</small><input value="${esc(s.server)}" placeholder="https://gsbaseballwalkout.yourname.workers.dev" onchange="S().server=this.value.trim();proMem.clear();save()" autocapitalize="off" autocorrect="off"></label></div>
@@ -827,6 +857,7 @@ document.addEventListener('pointerdown', () => { keepAwake(); }, { passive: true
     if (data.settings.template === 'Now batting, number {number}, {name}!') data.settings.template = 'Now batting... number {number}... {name}!';
     data.settings.v2 = true; save();
   }
+  if (!data.settings.v3) { data.settings.engine = 'pro'; data.settings.depth = 1; data.settings.v3 = true; save(); }
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
   try { speechSynthesis.onvoiceschanged = () => view === 'settings' && renderSettings(); } catch (e) {}
   render();

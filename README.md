@@ -12,7 +12,7 @@ All songs stay on the device (IndexedDB); nothing is uploaded.
 
 ## Pro announcer (Cloudflare)
 
-The pro announcer voice is made by a small Cloudflare Worker (`worker/index.js`) using Workers AI (Deepgram Aura-2), then run through a stadium P.A. effect on the phone. Each player's announcement is made once and saved on the device, so games work with no signal.
+The pro announcer uses ElevenLabs v3 through Cloudflare AI Gateway (paid with AI Gateway credits — no ElevenLabs account needed), with a "Basic" fallback on Workers AI (Deepgram Aura-2). Audio runs through a stadium P.A. effect on the phone. Each player's announcement is made once and saved on the device, so games work with no signal.
 
 Deploy: Cloudflare dashboard → Workers & Pages → Create → Import a repository → `GSBaseballWalkOut` → Deploy. `wrangler.jsonc` sets up the app files and the AI binding. The app is then at `https://gsbaseballwalkout.<your-subdomain>.workers.dev`.
 If you open the app from GitHub Pages instead, paste that workers.dev address into Settings → Announcer server.
