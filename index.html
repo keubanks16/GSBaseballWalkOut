@@ -703,7 +703,9 @@ function renderSounds() {
 /* ---- find sounds online (Myinstants, through this app's server) ---- */
 let find = { q: '', list: null, busy: false, err: '' };
 const findRaw = new Map();
-const api = p => (S().server || '').trim().replace(/\/$/, '') + p;
+// Opened from GitHub Pages (or anywhere that isn't the Cloudflare app)? Use the Cloudflare app's server for sound search.
+const SFX_SERVER = 'https://gsbaseballwalkout.kollinmeubanks.workers.dev';
+const api = p => ((S().server || '').trim().replace(/\/$/, '') || (/\.workers\.dev$/.test(location.hostname) ? '' : SFX_SERVER)) + p;
 function findHtml() {
   if (find.busy) return '<p class="hint">Searching…</p>';
   if (find.err) return `<p class="hint warn">${esc(find.err)}</p>`;
@@ -719,7 +721,7 @@ async function findSfx() {
   try {
     const r = await fetch(api('/api/sfx?q=' + encodeURIComponent(q)), { cache: 'no-store' });
     const j = await r.json().catch(() => null);
-    if (!j) throw new Error(r.status === 404 || r.status === 405 ? 'Sound search needs the Cloudflare version of the app (or the Announcer server filled in under Settings).' : 'Search failed (' + r.status + ')');
+    if (!j) throw new Error(r.status === 404 || r.status === 405 ? 'Sound search could not reach the app server. Fill in the Announcer server under Settings.' : 'Search failed (' + r.status + ')');
     if (!r.ok) throw new Error(j.error || 'Search failed (' + r.status + ')');
     find.list = Array.isArray(j.results) ? j.results : [];
   } catch (e) { find.err = navigator.onLine === false ? 'You are offline. Searching needs a signal.' : String(e && e.message || e); }
