@@ -75,6 +75,11 @@ body.np-on #np{display:flex}
 .pad.on{border-color:var(--gold);background:#2a2614}
 .pad.add{border:2px dashed var(--line);color:var(--mut)}
 .editing .pad:not(.add){border-color:#555}
+.fr{border:2px solid transparent}
+.fr.on{border-color:var(--gold);background:#2a2614}
+.fr .info{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.find{display:flex;gap:8px;margin-top:8px}
+.find button{flex:none}
 .sec{background:var(--card);border-radius:14px;padding:4px 14px 14px;margin:12px 0}
 .row{display:flex;gap:10px;align-items:flex-end}
 .row>*{flex:1}
@@ -447,7 +452,7 @@ async function playSfx(id) {
     src.onended = done;
   } catch (e) { done(); toast('Could not play that sound'); }
 }
-function markSfx() { document.querySelectorAll('.pad[data-id]').forEach(el => el.classList.toggle('on', !!sfxCur && sfxCur.id === el.dataset.id)); }
+function markSfx() { document.querySelectorAll('.pad[data-id],.fr[data-id]').forEach(el => el.classList.toggle('on', !!sfxCur && sfxCur.id === el.dataset.id)); }
 
 /* ============ now playing bar ============ */
 function renderNP() {
@@ -689,8 +694,72 @@ function renderSounds() {
     <h3>My sounds</h3>
     <div class="grid ${sfxEdit ? 'editing' : ''}">${custom.map(s => `<div class="pad" data-id="${s.id}" onclick="${sfxEdit ? `editSfx('${s.id}')` : `playSfx('${s.id}')`}"><span>${esc(s.emoji || '🔊')}</span>${esc(s.name)}${sfxEdit ? '<small>tap to edit</small>' : ''}</div>`).join('')}
       <div class="pad add" onclick="editSfx()"><span>＋</span>Add sound</div></div>
-    <p class="hint" style="margin-top:14px">Add clips like a strikeout song, home run horn, “Let's go!” chant, or between-innings music. Tap again to stop.</p>`;
+    <p class="hint" style="margin-top:14px">Add clips like a strikeout song, home run horn, “Let's go!” chant, or between-innings music. Tap again to stop.</p>
+    <h3>Find a sound</h3>
+    <form class="find" onsubmit="event.preventDefault();findSfx()"><input id="find-q" type="search" value="${esc(find.q)}" placeholder="e.g. sad trombone" enterkeyhint="search" autocapitalize="off" autocomplete="off"><button class="gold">Search</button></form>
+    <div id="find-out">${findHtml()}</div>`;
   markSfx();
+}
+/* ---- find sounds online (Myinstants, through this app's server) ---- */
+let find = { q: '', list: null, busy: false, err: '' };
+const findRaw = new Map();
+const api = p => (S().server || '').trim().replace(/\/$/, '') + p;
+function findHtml() {
+  if (find.busy) return '<p class="hint">Searching…</p>';
+  if (find.err) return `<p class="hint warn">${esc(find.err)}</p>`;
+  if (!find.list) return '<p class="hint">Search thousands of sound effects from Myinstants. Tap ▶ to hear one, then ＋ Add to keep it on this phone so it works at the field with no signal.</p>';
+  if (!find.list.length) return '<p class="hint">No sounds found. Try different words.</p>';
+  return find.list.map((it, i) => `<div class="lu fr" data-id="find-${i}"><button onclick="tryFind(${i})">▶</button><div class="info">${esc(it.title)}</div>${it.added ? '<small>✓ Added</small>' : `<button class="gold" onclick="addFind(${i},this)">＋ Add</button>`}</div>`).join('');
+}
+function paintFind() { const el = $('#find-out'); if (el) { el.innerHTML = findHtml(); markSfx(); } }
+async function findSfx() {
+  const q = ($('#find-q')?.value || '').trim(); if (!q) return toast('Type the sound you want');
+  $('#find-q').blur(); stopSfx();
+  find = { q, list: null, busy: true, err: '' }; paintFind();
+  try {
+    const r = await fetch(api('/api/sfx?q=' + encodeURIComponent(q)), { cache: 'no-store' });
+    const j = await r.json().catch(() => null);
+    if (!j) throw new Error(r.status === 404 || r.status === 405 ? 'Sound search needs the Cloudflare version of the app (or the Announcer server filled in under Settings).' : 'Search failed (' + r.status + ')');
+    if (!r.ok) throw new Error(j.error || 'Search failed (' + r.status + ')');
+    find.list = Array.isArray(j.results) ? j.results : [];
+  } catch (e) { find.err = navigator.onLine === false ? 'You are offline. Searching needs a signal.' : String(e && e.message || e); }
+  find.busy = false; paintFind();
+}
+function findClip(i) {
+  const it = find.list[i];
+  if (!findRaw.has(it.mp3)) {
+    const pr = fetch(api('/api/sfx/clip?u=' + encodeURIComponent(it.mp3))).then(async r => {
+      if (!r.ok) throw new Error('Could not download that sound');
+      return { data: await r.arrayBuffer(), type: r.headers.get('content-type') || 'audio/mpeg', name: it.title };
+    });
+    pr.catch(() => findRaw.delete(it.mp3)); findRaw.set(it.mp3, pr);
+  }
+  return findRaw.get(it.mp3);
+}
+async function tryFind(i) {
+  ac(); setSession('playback');
+  const id = 'find-' + i;
+  if (sfxCur) { const same = sfxCur.id === id; stopSfx(); if (same) return; }
+  stopWalkup(0.3);
+  const g = sfxBus(), me = { id, stop: busStop(g) };
+  sfxCur = me; markSfx();
+  const done = () => { if (sfxCur === me) { sfxCur = null; markSfx(); } };
+  try {
+    const buf = await decodeRaw((await findClip(i)).data); if (sfxCur !== me) return;
+    const src = ctx.createBufferSource(); src.buffer = buf; src.connect(g); src.start();
+    me.stop = busStop(g, () => { try { src.stop(ctx.currentTime + .2); } catch (e) {} });
+    src.onended = done;
+  } catch (e) { done(); toast('Could not play that sound'); }
+}
+async function addFind(i, btn) {
+  const it = find.list[i]; if (!it || it.added) return;
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  try {
+    const f = await findClip(i); await decodeRaw(f.data);
+    const audioId = uid(); await audioSet(audioId, f);
+    S().sfx.push({ id: uid(), name: it.title.slice(0, 30), emoji: '🔊', audioId, vol: 100 });
+    it.added = true; save(); stopSfx(); renderSounds(); toast('Added to My sounds');
+  } catch (e) { if (btn) { btn.disabled = false; btn.textContent = '＋ Add'; } toast('Could not add that sound'); }
 }
 let sx = null;
 function editSfx(id) {
