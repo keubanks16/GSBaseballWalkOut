@@ -3,7 +3,7 @@
 // Basic: Deepgram Aura-2 on Workers AI.
 const AURA = new Set(['zeus', 'orion', 'atlas', 'apollo', 'arcas', 'aries', 'draco', 'hermes', 'hyperion', 'janus', 'jupiter', 'mars', 'neptune', 'odysseus', 'orpheus', 'pluto', 'saturn',
   'athena', 'hera', 'luna', 'thalia', 'andromeda', 'asteria', 'aurora', 'helena', 'iris', 'juno', 'minerva', 'phoebe', 'vesta']);
-const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
+const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
 const err = (msg, status) => new Response(JSON.stringify({ error: msg }), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
 const b64 = s => Uint8Array.from(atob(s.replace(/^data:[^,]+,/, '')), c => c.charCodeAt(0));
 
@@ -54,10 +54,60 @@ async function dugout(env, search) {
   } catch (e) { return err('Dugout Lineup is not reachable', 502); }
 }
 
+// Sound-effect search (Myinstants). /api/sfx?q= returns { results: [{ title, mp3 }] };
+// /api/sfx/clip?u= passes the mp3 through so the app can save it on the phone.
+const SFX_APIS = ['https://myinstants-api.page.gd', 'https://myinstants-api.vercel.app'];
+const UA = { 'User-Agent': 'Mozilla/5.0 (GS Baseball Walkout Songs)' };
+const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { ...CORS, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+function sfxList(j) {
+  const arr = Array.isArray(j) ? j : Array.isArray(j && j.data) ? j.data : Array.isArray(j && j.results) ? j.results : [];
+  const out = [];
+  for (const x of arr) {
+    if (!x || typeof x !== 'object') continue;
+    let m = [x.mp3, x.sound, x.audio, x.url].find(v => typeof v === 'string' && /\.(mp3|wav|ogg|m4a)(\?|$)/i.test(v));
+    if (!m) continue;
+    try { m = new URL(m, 'https://www.myinstants.com').href; } catch { continue; }
+    out.push({ title: String(x.title || x.name || 'Sound').trim().slice(0, 80), mp3: m });
+    if (out.length >= 30) break;
+  }
+  return out;
+}
+async function sfxSearch(env, q) {
+  let last = 'Sound search is not reachable right now';
+  for (const base of env.SFX_API ? [env.SFX_API] : SFX_APIS) {
+    try {
+      const r = await fetch(base.replace(/\/$/, '') + '/search?q=' + encodeURIComponent(q), { headers: { ...UA, Accept: 'application/json' } });
+      const t = await r.text();
+      let j; try { j = JSON.parse(t); } catch { last = 'Sound search sent back a web page instead of results'; continue; }
+      const list = sfxList(j);
+      if (!r.ok && !list.length) { last = 'Sound search failed (' + r.status + ')'; continue; }
+      return json({ results: list });
+    } catch (e) { last = 'Sound search is not reachable right now'; }
+  }
+  return err(last, 502);
+}
+async function sfxClip(u) {
+  let t; try { t = new URL(u); } catch { return err('Bad link', 400); }
+  if (t.protocol !== 'https:' || !/(^|\.)myinstants\.com$/i.test(t.hostname)) return err('Not allowed', 400);
+  try {
+    const r = await fetch(t.href, { headers: { ...UA, Referer: 'https://www.myinstants.com/' } });
+    if (!r.ok) return err('Could not download that sound (' + r.status + ')', 502);
+    if (+(r.headers.get('content-length') || 0) > 8e6) return err('That sound is too big', 413);
+    return new Response(r.body, { headers: { ...CORS, 'Content-Type': r.headers.get('content-type') || 'audio/mpeg', 'Cache-Control': 'public, max-age=86400' } });
+  } catch (e) { return err('Could not download that sound', 502); }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === '/api/dugout') return dugout(env, url.search);
+    if (url.pathname === '/api/sfx' || url.pathname === '/api/sfx/clip') {
+      if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+      if (request.method !== 'GET') return err('GET only', 405);
+      if (url.pathname === '/api/sfx/clip') return sfxClip(url.searchParams.get('u') || '');
+      const q = (url.searchParams.get('q') || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+      return q ? sfxSearch(env, q) : err('No search words', 400);
+    }
     if (url.pathname !== '/api/announce') return env.ASSETS.fetch(request);
     if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
     if (request.method !== 'POST') return err('POST only', 405);
