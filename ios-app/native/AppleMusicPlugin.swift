@@ -63,29 +63,45 @@ public class AppleMusicPlugin: CAPPlugin, CAPBridgedPlugin, MPMediaPickerControl
         let sid = call.getString("storeId") ?? ""
         let start = call.getDouble("start") ?? 0
         withAccess(call) {
+            // Queue the song with its start point built in, so it begins at the right spot.
             var queued = false
             if let n = UInt64(pid), n != 0 {
                 let q = MPMediaQuery.songs()
                 q.addFilterPredicate(MPMediaPropertyPredicate(value: NSNumber(value: n), forProperty: MPMediaItemPropertyPersistentID))
-                if let items = q.items, !items.isEmpty {
-                    self.player.setQueue(with: MPMediaItemCollection(items: items))
+                if let item = q.items?.first {
+                    let d = MPMusicPlayerMediaItemQueueDescriptor(itemCollection: MPMediaItemCollection(items: [item]))
+                    if start > 0 { d.setStartTime(start, for: item) }
+                    self.player.setQueue(with: d)
                     queued = true
                 }
             }
             if !queued {
                 if sid.isEmpty || sid == "0" { call.reject("That song is not in this phone's Music library."); return }
-                self.player.setQueue(with: [sid])
+                let d = MPMusicPlayerStoreQueueDescriptor(storeIDs: [sid])
+                if start > 0 { d.setStartTime(start, forItemWithStoreID: sid) }
+                self.player.setQueue(with: d)
             }
             self.player.repeatMode = .none
             self.player.shuffleMode = .off
-            self.player.prepareToPlay { error in
-                DispatchQueue.main.async {
-                    if let error = error { call.reject("Apple Music could not play that song: \(error.localizedDescription)"); return }
-                    if start > 0 { self.player.currentPlaybackTime = start }
-                    self.player.play()
-                    call.resolve()
+            // prepareToPlay sometimes never answers, so start anyway after a few seconds.
+            var done = false
+            let finish: (Error?) -> Void = { error in
+                if done { return }
+                done = true
+                if let e = error as NSError? {
+                    call.reject("Apple Music could not play that song (\(e.domain) \(e.code)): \(e.localizedDescription)")
+                    return
+                }
+                self.player.play()
+                call.resolve()
+                if start > 1 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                        if self.player.playbackState == .playing && self.player.currentPlaybackTime < start - 1 { self.player.currentPlaybackTime = start }
+                    }
                 }
             }
+            self.player.prepareToPlay { error in DispatchQueue.main.async { finish(error) } }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) { finish(nil) }
         }
     }
 
