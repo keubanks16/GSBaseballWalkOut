@@ -194,9 +194,24 @@ function cleanLineup(t) { t.lineup = t.lineup.filter(id => t.players.some(p => p
 /* ============ audio engine ============ */
 let ctx, master;
 function setSession(type) { try { if (navigator.audioSession) navigator.audioSession.type = type; } catch (e) {} }
+// iPhone sometimes leaves the audio engine dead after a sound (it says "running" but its clock is frozen, or it
+// closes). When that happens, throw the engine away and start a fresh one instead of making the coach restart the app.
+let acStuck = false, acLastT = -1;
+setInterval(() => {
+  if (!ctx) return;
+  acStuck = ctx.state === 'running' && ctx.currentTime === acLastT;
+  acLastT = ctx.state === 'running' ? ctx.currentTime : -1;
+}, 1000);
+function resetAudio() {
+  const old = ctx; ctx = null; master = null; acStuck = false; acLastT = -1;
+  try { cur = null; voiceSrc = null; sfxCur = null; noiseBuf = null; np = null; } catch (e) {}
+  bufCache.clear(); clipCache.clear(); for (const k in IR) delete IR[k];
+  try { old && old.close && old.close().catch(() => {}); } catch (e) {}
+}
 function ac() {
+  if (ctx && (ctx.state === 'closed' || acStuck)) resetAudio();
   if (!ctx) { const C = window.AudioContext || window.webkitAudioContext; ctx = new C(); master = ctx.createGain(); master.connect(ctx.destination); }
-  if (ctx.state !== 'running') ctx.resume();
+  if (ctx.state !== 'running') { const c = ctx, p = c.resume(); p && p.catch && p.catch(() => { if (ctx === c) acStuck = true; }); }
   return ctx;
 }
 const decodeRaw = ab => new Promise((res, rej) => ac().decodeAudioData(ab.slice(0), res, rej));
@@ -362,7 +377,7 @@ function scheduleEnd(p) {
 }
 function stopWalkup(fade = 0.25) {
   playToken++;
-  try { speechSynthesis.cancel(); } catch (e) {}
+  try { if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel(); } catch (e) {}
   if (voiceSrc) { try { voiceSrc.stop(); } catch (e) {} voiceSrc = null; }
   if (cur && ctx) {
     const c = cur; cur = null; const now = ctx.currentTime;
