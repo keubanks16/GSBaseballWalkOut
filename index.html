@@ -991,7 +991,7 @@ async function amPlay(p, tok) {
   if (nat()) {
     try {
       const me = amCur = { p, tok, started: false }, st = +p.start || 0;
-      await amNative('play', { persistentId: String(p.am.pid || ''), storeId: String(p.am.id || ''), start: st });
+      await Promise.race([amNative('play', { persistentId: String(p.am.pid || ''), storeId: String(p.am.id || ''), start: st }), new Promise((_, rej) => setTimeout(() => rej(new Error('Apple Music did not start the song. Open the Music app once, make sure the song plays there, then try again.')), 12000))]);
       if (tok !== playToken || amCur !== me) { if (amCur === me) amCur = null; amNative('stop').catch(() => {}); return; }
       me.started = true; if (np) np.phase = 'music'; renderNP();
       const L = +p.length || 0, total = L > 0 ? L : Math.max(2, (+p.am.dur || 240) - st);
