@@ -120,16 +120,57 @@ async function sfxClip(u) {
 
 // Team sync: one saved copy of everything (players, sounds, settings + the audio files) per team code, in KV.
 // The code never gets stored; its hash is the key, so only phones that know the code can read or change the team.
-async function teamKey(request) {
+async function codeHash(code) {
+  const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('gs-walkout:' + String(code).trim().toLowerCase()));
+  return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 40);
+}
+async function teamKey(request, env) {
   let code = ''; try { code = decodeURIComponent(request.headers.get('X-Team-Code') || '').trim().toLowerCase(); } catch { }
   if (code.length < 6 || code.length > 64) return null;
-  const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('gs-walkout:' + code));
-  return 't:' + [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 40) + ':';
+  const h = await codeHash(code);
+  // A replacement code made on the recovery page points at the team saved under the forgotten code.
+  const alias = await env.SYNC.get('alias:' + h);
+  return alias && /^t:[a-f0-9]{40}:$/.test(alias) ? alias : 't:' + h + ':';
+}
+// Forgot the team code? With the RECOVERY_KEY secret set in Cloudflare, this page lists the saved teams
+// and lets the owner give one a new code. Open /api/sync/recover?key=<RECOVERY_KEY> in a browser.
+async function syncRecover(request, env, url) {
+  const page = (body, status = 200) => new Response('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GS Walkout recovery</title><body style="font:16px -apple-system,system-ui,sans-serif;background:#04122D;color:#E7EEF9;max-width:560px;margin:0 auto;padding:20px"><h2>GS Walkout: team recovery</h2>' + body, { status, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+  const h = t => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  if (!env.SYNC) return page('<p>Team sync storage is not set up.</p>', 501);
+  if (!env.RECOVERY_KEY) return page('<p>Recovery is off. Add a secret named <b>RECOVERY_KEY</b> to this Worker in Cloudflare, then open this page again with <code>?key=</code> and that value.</p>', 403);
+  const key = url.searchParams.get('key') || '';
+  if (key.length < 8 || key !== String(env.RECOVERY_KEY).trim()) return page('<p>That recovery key is not right.</p>', 403);
+  if (request.method === 'POST') {
+    const f = await request.formData(), team = String(f.get('team') || ''), code = String(f.get('code') || '').trim().toLowerCase();
+    if (!/^[a-f0-9]{40}$/.test(team) || !(await env.SYNC.getWithMetadata('t:' + team + ':data', 'stream')).value) return page('<p>That saved team was not found.</p>', 404);
+    if (code.length < 6 || code.length > 64) return page('<p>The new code needs at least 6 characters. Go back and try again.</p>', 400);
+    const nh = await codeHash(code);
+    if (nh !== team && (await env.SYNC.getWithMetadata('t:' + nh + ':data', 'stream')).value) return page('<p>That code is already used by another saved team. Go back and pick a different one.</p>', 409);
+    if (nh !== team) await env.SYNC.put('alias:' + nh, 't:' + team + ':');
+    return page('<p>✅ Done. The new team code is:</p><p style="font-size:22px"><b>' + h(code) + '</b></p><p>Open the app → Settings → Team sync, type that code, and tap Turn on team sync. Write the code down, then delete the RECOVERY_KEY secret in Cloudflare.</p>');
+  }
+  const teams = []; let cursor;
+  do {
+    const l = await env.SYNC.list({ prefix: 't:', cursor });
+    for (const k of l.keys) { const m = /^t:([a-f0-9]{40}):data$/.exec(k.name); if (m) teams.push({ id: m[1], at: (k.metadata && k.metadata.at) || 0, audio: 0 }); }
+    for (const k of l.keys) { const m = /^t:([a-f0-9]{40}):a:/.exec(k.name), t = m && teams.find(x => x.id === m[1]); if (t) t.audio++; }
+    cursor = l.list_complete ? null : l.cursor;
+  } while (cursor);
+  if (!teams.length) return page('<p>No team has been saved to team sync yet, so there is nothing to recover here.</p>');
+  let out = '<p>Saved teams found: ' + teams.length + '. Give the one you want a new code.</p>';
+  for (const t of teams.sort((a, b) => b.at - a.at)) {
+    let names = '', players = 0, sounds = 0;
+    try { const d = JSON.parse(await env.SYNC.get('t:' + t.id + ':data')); names = d.teams.map(x => x.name).join(', '); players = d.teams.reduce((n, x) => n + x.players.length, 0); sounds = ((d.settings && d.settings.sfx) || []).length; } catch { }
+    out += '<form method="post" style="background:#0A1D40;border-radius:14px;padding:14px;margin:14px 0"><b>' + h(names || 'Team') + '</b><br>' + players + ' players · ' + sounds + ' sounds · ' + t.audio + ' audio files<br>Last saved: ' + h(t.at ? new Date(t.at).toLocaleString('en-US', { timeZone: 'America/New_York', dateStyle: 'medium', timeStyle: 'short' }) + ' ET' : 'unknown')
+      + '<input type="hidden" name="team" value="' + t.id + '"><p><input name="code" placeholder="New team code (6+ characters)" autocapitalize="off" autocorrect="off" style="width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:0;font-size:16px"></p><button style="width:100%;padding:12px;border-radius:10px;border:0;background:#6DA0D6;font-size:16px;font-weight:700">Use this code for this team</button></form>';
+  }
+  return page(out);
 }
 async function teamSync(request, env, url) {
   if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
   if (!env.SYNC) return err('Team sync storage is not set up yet', 501);
-  const k = await teamKey(request); if (!k) return err('The team code needs at least 6 characters', 401);
+  const k = await teamKey(request, env); if (!k) return err('The team code needs at least 6 characters', 401);
   const sub = url.pathname.slice('/api/sync'.length), m = request.method;
   if (sub === '') {
     const cur = await env.SYNC.getWithMetadata(k + 'data', 'text'), v = cur.value ? (cur.metadata && cur.metadata.v) || 1 : 0;
@@ -295,6 +336,7 @@ export default {
     if (url.pathname === '/api/dugout') return dugout(env, url.search);
     if (url.pathname.startsWith('/api/hub/')) return sportsHub(request, url);
     if (url.pathname === '/api/music/token' || url.pathname === '/api/music/search') return request.method === 'OPTIONS' ? new Response(null, { headers: CORS }) : appleMusic(env, url);
+    if (url.pathname === '/api/sync/recover') { try { return await syncRecover(request, env, url); } catch (e) { return err('Recovery had a problem: ' + String(e && e.message || e).slice(0, 200), 502); } }
     if (url.pathname === '/api/sync' || url.pathname.startsWith('/api/sync/')) { try { return await teamSync(request, env, url); } catch (e) { return err('Team sync had a problem: ' + String(e && e.message || e).slice(0, 200), 502); } }
     if (url.pathname === '/api/sfx' || url.pathname === '/api/sfx/clip') {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
