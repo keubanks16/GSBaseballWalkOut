@@ -10,6 +10,10 @@ A BallparkDJ-style walkout (walk-up) song app for GS Baseball. Runs in the brows
 
 Songs are kept on the device (IndexedDB) so games work with no signal.
 
+## Apple Music (test)
+
+A player can use an Apple Music song instead of a file. The Worker signs the MusicKit developer token from three secrets (`APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_MUSIC_KEY`) and searches the catalog; the app plays the song with MusicKit JS. Each phone signs in with its own Apple Music subscription and needs a signal.
+
 ## Team sync
 
 Settings → Team sync saves everything (players, songs, sounds, announcer clips, settings) to the Worker's KV namespace (`SYNC`) under a team code. Any phone that enters the same code gets the same setup and stays in step. Only the hash of the code is stored. Audio files up to 24 MB each.

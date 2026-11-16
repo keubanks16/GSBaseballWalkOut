@@ -379,7 +379,7 @@ function scheduleEnd(p) {
   try { cur.src.stop(now + L + 0.05); } catch (e) {}
 }
 function stopWalkup(fade = 0.25) {
-  playToken++;
+  playToken++; amStop(fade);
   try { if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel(); } catch (e) {}
   if (voiceSrc) { try { voiceSrc.stop(); } catch (e) {} voiceSrc = null; }
   if (cur && ctx) {
@@ -397,7 +397,8 @@ async function playWalkup(p) {
   stopWalkup(0.3); stopSfx();
   const tok = ++playToken;
   np = { p, phase: 'intro' }; renderNP();
-  const clipP = getClip(p).catch(() => null);
+  const am = p.am && p.am.id, clipP = am ? Promise.resolve(null) : getClip(p).catch(() => null);
+  if (am) amLoad().catch(() => {});
   const mode = p.announce || 'tts';
   let introDone; const introP = new Promise(r => introDone = once(r));
   if (mode === 'tts') speak(announceText(p), introDone);
@@ -405,7 +406,8 @@ async function playWalkup(p) {
   else if (mode === 'voice' && (p.voiceId || p._voice)) getVoice(p).then(b => { if (tok !== playToken) return; b ? playVoice(b, recOpts(p), introDone) : introDone(); }).catch(introDone);
   else introDone();
 
-  if (p.under && mode !== 'none') {
+  if (am) { await introP; if (tok !== playToken) return; amPlay(p, tok); }
+  else if (p.under && mode !== 'none') {
     const clip = await clipP; if (tok !== playToken) return;
     if (clip) startMusic(clip, p, +S().duck || 0.25, true);
     if (cur) cur.t0 = ctx.currentTime;
@@ -447,7 +449,7 @@ function renderNP() {
   if (np) {
     const p = np.p;
     $('#np-name').textContent = (p.number !== '' && p.number != null ? '#' + p.number + ' ' : '') + (p.name || 'Preview');
-    $('#np-song').textContent = np.phase === 'intro' ? '🎤 Announcing…' : '🎵 ' + (p.songName || (p._song && p._song.name) || '');
+    $('#np-song').textContent = np.phase === 'intro' ? '🎤 Announcing…' : (p.am ? '🍎 ' + p.am.name : '🎵 ' + (p.songName || (p._song && p._song.name) || ''));
   }
   document.querySelectorAll('.card[data-id]').forEach(el => el.classList.toggle('playing', !!np && np.p.id === el.dataset.id));
   cancelAnimationFrame(raf);
@@ -475,7 +477,7 @@ function render() {
   renderNP();
 }
 const pName = p => esc(p.name || 'Unnamed');
-const songLine = p => p.songId ? '🎵 ' + esc(p.songName || 'Song') + (p.start ? ' · from ' + fmt(p.start) : '') : '<span class="warn">⚠️ No song yet</span>';
+const songLine = p => p.am ? '🍎 ' + esc(p.am.name) + (p.start ? ' · from ' + fmt(p.start) : '') : p.songId ? '🎵 ' + esc(p.songName || 'Song') + (p.start ? ' · from ' + fmt(p.start) : '') : '<span class="warn">⚠️ No song yet</span>';
 
 function renderGame() {
   const t = team(); cleanLineup(t);
@@ -562,7 +564,13 @@ function renderEditor() {
     <div class="songbox"><div class="nm">${songName ? esc(songName) : '<span class="mut">No song chosen</span>'}</div>
       <label class="filebtn">${songName ? 'Change' : 'Choose song'}<input type="file" onchange="pickSong(this)"></label></div>
     <p class="hint">Pick an MP3/M4A from your Files app. Songs are saved on this device.</p>
-    ${songName ? `<audio id="f-audio" controls preload="metadata" playsinline></audio>
+    <div class="songbox" style="margin-top:8px"><div class="nm">${p.am ? '🍎 ' + esc(p.am.name) + ' · ' + esc(p.am.artist) : '<span class="mut">Or use an Apple Music song (test)</span>'}</div>
+      <button onclick="amPickOpen()">${p.am ? 'Change' : 'Search'}</button>${p.am ? '<button onclick="amClear()">✕</button>' : ''}</div>
+    ${edit.am ? `<form class="find" onsubmit="event.preventDefault();amSearch()"><input id="am-q" type="search" value="${esc(edit.am.q)}" placeholder="Song or artist" enterkeyhint="search" autocomplete="off"><button class="gold">Search</button></form>
+      ${edit.am.busy ? '<p class="hint">Searching Apple Music…</p>' : edit.am.err ? `<p class="hint warn">${esc(edit.am.err)}</p>` : (edit.am.list || []).map((x, i) => `<div class="lu" onclick="amChoose(${i})"><div class="info"><b>${esc(x.name)}${x.clean ? '' : ' <span class="tag">E</span>'}</b><small>${esc(x.artist)} · ${fmt(x.dur)}</small></div><button class="gold">Use</button></div>`).join('') || (edit.am.list ? '<p class="hint">No songs found.</p>' : '')}` : ''}
+    ${p.am ? `<label>Start at (seconds)<input id="f-start" type="number" inputmode="decimal" step="0.5" min="0" value="${+p.start || 0}"></label>
+    <p class="hint">Apple Music songs stream, so this phone needs a signal and an Apple Music sign-in (Settings → Apple Music). The Apple Music song is used instead of the file above. Fade out, volume and “music under the announcement” may not work with it on iPhone.</p>` : ''}
+    ${songName && !p.am ? `<audio id="f-audio" controls preload="metadata" playsinline></audio>
     <div class="row"><label>Start at (seconds)<input id="f-start" type="number" inputmode="decimal" step="0.5" min="0" value="${+p.start || 0}"></label>
       <button style="flex:0 0 auto;margin-bottom:1px" onclick="markStart()">⏱ Use spot playing now</button></div>
     <p class="hint">Play the song above, pause right where the good part starts, then tap “Use spot playing now.”</p>` : ''}
@@ -848,6 +856,11 @@ function renderSettings() {
       <label>Fade out <span class="vals">${s.fadeOut} sec</span><input type="range" min="0" max="8" step="0.5" value="${s.fadeOut}" onchange="S().fadeOut=+this.value;save();renderSettings()"></label>
       <label>Music level under announcement <span class="vals">${Math.round(s.duck * 100)}%</span><input type="range" min="0.05" max="0.6" step="0.05" value="${s.duck}" onchange="S().duck=+this.value;save();renderSettings()"></label></div>
 
+    <div class="sec"><h3>Apple Music (test)</h3>
+      <p class="hint">Lets a player use a song from Apple Music instead of a file (pick it under Roster → player → Walkout song). Each phone needs its own Apple Music subscription and sign-in, and a signal at the field.</p>
+      <div class="tools">${amKit ? (amKit.isAuthorized ? '<button onclick="amSignOut()">Sign out of Apple Music</button>' : '<button class="gold" onclick="amSignIn()">Sign in to Apple Music</button>') : '<button class="gold" onclick="amSetup()">Connect Apple Music</button>'}</div>
+      <p class="hint" id="amStat">${esc(amMsg)}</p></div>
+
     <div class="sec"><h3>Team sync</h3>
       <p class="hint">Saves everything (players, songs, sounds, announcer clips and settings) to the team, so any phone with the team code has it. After that, changes save by themselves.</p>
       ${syncOn() ? `<p>✅ On · team code <b>${esc(sync.code)}</b></p>
@@ -927,6 +940,69 @@ async function importBackup(inp) {
   } catch (e) { toast('Could not load backup: ' + e.message); }
   inp.value = '';
 }
+
+/* ============ Apple Music (test): stream a subscriber's Apple Music song as the walkout song ============ */
+let amKit = null, amLoading = null, amCur = null, amTimer = null, amFade = null, amMsg = '';
+const amErr = e => String((e && (e.message || e.description || e.errorCode || e.name)) || e || 'unknown problem');
+function amLoad() {
+  return amLoading ||= (async () => {
+    if (!window.MusicKit) await new Promise((res, rej) => {
+      const sc = document.createElement('script'); sc.src = 'https://js-cdn.music.apple.com/musickit/v3/musickit.js'; sc.async = true;
+      sc.onload = res; sc.onerror = () => rej(new Error('Could not load Apple Music. Check your signal.')); document.head.appendChild(sc);
+    });
+    if (!window.MusicKit) await new Promise(r => document.addEventListener('musickitloaded', r, { once: true }));
+    const r = await fetch(api('/api/music/token'), { cache: 'no-store' }), j = await r.json().catch(() => null);
+    if (!r.ok || !j || !j.token) throw new Error((j && j.error) || 'Could not get the Apple Music key from the app server (' + r.status + ')');
+    await MusicKit.configure({ developerToken: j.token, app: { name: 'GS Baseball Walkout', build: '1.0' } });
+    amKit = MusicKit.getInstance();
+    const ended = () => { if (amCur) { amCur = null; clearTimeout(amTimer); np = null; renderNP(); } };
+    try { amKit.addEventListener('playbackStateDidChange', ev => { const P = MusicKit.PlaybackStates, st = ev && ev.state; if (amCur && amCur.started && (st === P.ended || st === P.completed)) ended(); }); } catch (e) {}
+    return amKit;
+  })().catch(e => { amLoading = null; throw e; });
+}
+function amStop(fade = 0) {
+  clearTimeout(amTimer); clearInterval(amFade);
+  const m = amKit, was = amCur; amCur = null; if (!m || !was) return;
+  const end = () => { clearInterval(amFade); try { Promise.resolve(m.stop()).catch(() => {}); } catch (e) {} try { m.volume = 1; } catch (e) {} };
+  if (fade > 0.3) { const v0 = m.volume || 1, t0 = Date.now(); amFade = setInterval(() => { const k = (Date.now() - t0) / (fade * 1000); if (k >= 1) return end(); try { m.volume = v0 * (1 - k); } catch (e) {} }, 60); }
+  else end();
+}
+async function amPlay(p, tok) {
+  const fail = m => { if (tok !== playToken) return; amCur = null; np = null; renderNP(); toast(m, 4000); };
+  try {
+    const m = await amLoad(); if (tok !== playToken) return;
+    if (!m.isAuthorized) return fail('Sign in to Apple Music first: Settings → Apple Music');
+    clearInterval(amFade); const me = amCur = { p, tok, started: false }, st = +p.start || 0;
+    try { m.volume = (+p.vol || 100) / 100; } catch (e) {}
+    await m.setQueue({ song: String(p.am.id), startTime: st, startPlaying: true });
+    if (tok !== playToken || amCur !== me) { try { m.stop(); } catch (e) {} return; }
+    if (st > 1 && (m.currentPlaybackTime || 0) < st - 1) { try { await m.seekToTime(st); } catch (e) {} }
+    me.started = true; if (np) np.phase = 'music'; renderNP();
+    const L = +p.length || 0, fo = Math.min(+p.fadeOut || 0, L);
+    if (L > 0) amTimer = setTimeout(() => { if (amCur === me) { amStop(fo); np = null; renderNP(); } }, Math.max(0.5, L - fo) * 1000);
+  } catch (e) { fail('Apple Music could not play that song: ' + amErr(e)); }
+}
+function amSay(m) { amMsg = m; const el = $('#amStat'); if (el) el.textContent = m; }
+async function amSetup() { amSay('Connecting to Apple Music…'); try { await amLoad(); amMsg = amKit.isAuthorized ? 'Signed in to Apple Music on this phone.' : 'Connected. Now tap Sign in.'; } catch (e) { amMsg = amErr(e); } if (view === 'settings') renderSettings(); }
+function amSignIn() {
+  if (!amKit) return amSetup();
+  amSay('Opening the Apple Music sign-in…');
+  amKit.authorize().then(() => { amMsg = amKit.isAuthorized ? 'Signed in to Apple Music on this phone.' : 'Sign-in did not finish.'; }, e => { amMsg = 'Sign-in did not work: ' + amErr(e); }).then(() => { if (view === 'settings') renderSettings(); });
+}
+function amSignOut() { if (!amKit) return; Promise.resolve(amKit.unauthorize()).catch(() => {}).then(() => { amMsg = 'Signed out.'; if (view === 'settings') renderSettings(); }); }
+function amPickOpen() { readForm(); edit.am = edit.am ? null : { q: '', list: null, busy: false, err: '' }; reEdit(); const el = $('#am-q'); if (el) el.focus(); }
+function amClear() { readForm(); delete edit.p.am; edit.am = null; reEdit(); }
+async function amSearch() {
+  const q = ($('#am-q').value || '').trim(); if (!q) return; readForm();
+  const st = edit.am = { q, list: null, busy: true, err: '' }; reEdit();
+  try {
+    const r = await fetch(api('/api/music/search?q=' + encodeURIComponent(q)), { cache: 'no-store' }), j = await r.json().catch(() => null);
+    if (!r.ok || !j) throw new Error((j && j.error) || 'Apple Music search failed (' + r.status + ')');
+    st.list = j.results || [];
+  } catch (e) { st.err = navigator.onLine === false ? 'You are offline. Searching needs a signal.' : amErr(e); }
+  st.busy = false; if (edit && edit.am === st) reEdit();
+}
+function amChoose(i) { const x = edit.am && edit.am.list && edit.am.list[i]; if (!x) return; readForm(); edit.p.am = { id: x.id, name: x.name, artist: x.artist, dur: x.dur }; edit.p.start = 0; edit.am = null; reEdit(); amLoad().catch(() => {}); }
 
 /* ============ team sync: one saved copy of everything per team code ============ */
 let sync = { code: '', v: 0, last: '', at: 0, dirtyAt: 0 }, syncMsg = '', syncBusy = false, syncAgain = false, syncTimer = null, syncRemote = null;
@@ -1141,6 +1217,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
   try { speechSynthesis.onvoiceschanged = () => view === 'settings' && renderSettings(); } catch (e) {}
   try { const sv = await kvGet('sync'); if (sv && sv.code) sync = { ...sync, ...sv }; } catch (e) {}
   render(); syncDugout(); syncRun();
+  if (data.teams.some(t => t.players.some(p => p.am))) amLoad().catch(() => {});
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
 </script>
