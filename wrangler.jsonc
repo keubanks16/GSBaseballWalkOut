@@ -4,6 +4,8 @@
   "compatibility_date": "2026-11-01",
   "assets": { "directory": "./", "binding": "ASSETS" },
   "ai": { "binding": "AI" },
+  // Team sync: the saved copy of each team (players, sounds, settings and audio files).
+  "kv_namespaces": [{ "binding": "SYNC", "id": "bbc950313f244f338f4ec4068588bd90" }],
   // Reads the batting order from the Dugout Lineup app's Worker.
   "services": [{ "binding": "DUGOUT", "service": "dugoutlineup" }]
 }

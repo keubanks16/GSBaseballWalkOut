@@ -189,7 +189,7 @@ function defaultData() {
 const team = () => data.teams.find(t => t.id === data.teamId) || data.teams[0];
 const S = () => data.settings;
 let saveTimer;
-function save() { clearTimeout(saveTimer); saveTimer = setTimeout(() => kvSet('data', data).catch(e => toast('Save failed: ' + e.message)), 150); }
+function save() { clearTimeout(saveTimer); saveTimer = setTimeout(() => kvSet('data', data).catch(e => toast('Save failed: ' + e.message)), 150); syncSoon(); }
 function newPlayer() { const s = S(); return { id: uid(), name: '', number: '', position: '', songId: null, songName: '', start: 0, length: s.length, fadeOut: s.fadeOut, vol: 100, announce: 'pro', text: '', voiceId: null, proId: null, proKey: '', echo: true, under: false }; }
 function findPlayer(id) { for (const t of data.teams) { const p = t.players.find(x => x.id === id); if (p) return p; } return null; }
 function cleanLineup(t) { t.lineup = t.lineup.filter(id => t.players.some(p => p.id === id)); if (t.upNext >= t.lineup.length) t.upNext = 0; }
@@ -848,8 +848,16 @@ function renderSettings() {
       <label>Fade out <span class="vals">${s.fadeOut} sec</span><input type="range" min="0" max="8" step="0.5" value="${s.fadeOut}" onchange="S().fadeOut=+this.value;save();renderSettings()"></label>
       <label>Music level under announcement <span class="vals">${Math.round(s.duck * 100)}%</span><input type="range" min="0.05" max="0.6" step="0.05" value="${s.duck}" onchange="S().duck=+this.value;save();renderSettings()"></label></div>
 
-    <div class="sec"><h3>Backup &amp; move to another phone</h3>
-      <p class="hint">Everything (songs included) lives on this device. Make a backup file to keep it safe or to load it on another phone or iPad.</p>
+    <div class="sec"><h3>Team sync</h3>
+      <p class="hint">Saves everything (players, songs, sounds, announcer clips and settings) to the team, so any phone with the team code has it. After that, changes save by themselves.</p>
+      ${syncOn() ? `<p>✅ On · team code <b>${esc(sync.code)}</b></p>
+      <div class="tools"><button onclick="syncRun()">↻ Sync now</button><button class="danger" onclick="syncOff()">Turn off on this phone</button></div>`
+      : `<label>Team code <small>(make one up, at least 6 characters, then type the same code on your other phone)</small><input id="sync-code" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" placeholder="e.g. stingerz-8u-2027"></label>
+      <div class="tools"><button class="gold" onclick="syncConnect()">Turn on team sync</button></div>`}
+      <p class="hint" id="syncStat">${esc(syncMsg)}</p></div>
+
+    <div class="sec"><h3>Backup file</h3>
+      <p class="hint">A backup file holds everything (songs included). Use it to keep a spare copy, or to move to another phone without team sync.</p>
       <div class="tools"><button onclick="exportBackup()">⬇️ Save backup</button><label class="filebtn" style="flex:1;text-align:center;background:var(--card2);color:var(--text);font-weight:400">⬆️ Load backup<input type="file" accept=".json,application/json" onchange="importBackup(this)"></label></div>
       <p class="hint" id="store"></p></div>
 
@@ -915,10 +923,127 @@ async function importBackup(inp) {
     if (!confirm('Replace everything on this device with this backup?')) return;
     stopAll(); await audioClear(); bufCache.clear(); clipCache.clear();
     for (const [k, r] of Object.entries(o.audio || {})) await audioSet(k, { type: r.type, name: r.name, data: b64ToAb(r.b64) });
-    data = o.data; await kvSet('data', data); render(); toast('Backup loaded');
+    data = o.data; await kvSet('data', data); render(); toast('Backup loaded'); syncSoon();
   } catch (e) { toast('Could not load backup: ' + e.message); }
   inp.value = '';
 }
+
+/* ============ team sync: one saved copy of everything per team code ============ */
+let sync = { code: '', v: 0, last: '', at: 0, dirtyAt: 0 }, syncMsg = '', syncBusy = false, syncAgain = false, syncTimer = null, syncRemote = null;
+const syncOn = () => !!(sync && sync.code);
+const syncSave = () => kvSet('sync', sync).catch(() => {});
+function syncSay(m) { syncMsg = m; const el = $('#syncStat'); if (el) el.textContent = m; }
+const syncFetch = (path, opt = {}) => fetch(api('/api/sync' + path), { cache: 'no-store', ...opt, headers: { 'X-Team-Code': encodeURIComponent(sync.code), ...(opt.headers || {}) } });
+// What gets shared. Left out: things that belong to this phone (who's up next, which team is showing, live Dugout status).
+function syncPayload() {
+  const d = JSON.parse(JSON.stringify(data)); delete d.teamId; delete d.settings.server;
+  d.teams.forEach(t => delete t.upNext);
+  const g = d.settings.dugout; d.settings.dugout = g ? { on: g.on, teamId: g.teamId } : {};
+  return JSON.stringify(d);
+}
+function syncApply(d) {
+  const old = data, keep = S();
+  d.settings = { ...defaultData().settings, ...d.settings, server: keep.server || '', dugout: { ...keep.dugout, ...(d.settings.dugout || {}) } };
+  d.teams.forEach(t => { const o = old.teams.find(x => x.id === t.id); t.upNext = (o && o.upNext) || 0; cleanLineup(t); });
+  d.teamId = d.teams.some(t => t.id === old.teamId) ? old.teamId : d.teams[0].id;
+  data = d; kvSet('data', data).catch(() => {});
+  sync.last = syncPayload(); sync.dirtyAt = 0; render();
+}
+function syncSoon(ms = 4000) {
+  if (!syncOn() || syncTimer) return;
+  syncTimer = setTimeout(() => { syncTimer = null; if (!syncOn()) return; if (syncPayload() !== sync.last) { if (!sync.dirtyAt) sync.dirtyAt = Date.now(); syncRun(); } }, ms);
+}
+function syncAudioIds() {
+  const ids = new Set();
+  data.teams.forEach(t => t.players.forEach(p => [p.songId, p.voiceId, p.proId].forEach(k => k && ids.add(k))));
+  S().sfx.forEach(x => x.audioId && ids.add(x.audioId));
+  return ids;
+}
+async function syncAudio() {
+  const need = [...syncAudioIds()]; if (!need.length) return;
+  const local = new Set(await audioKeys());
+  const plan = () => ({ up: need.filter(k => local.has(k) && !(syncRemote && syncRemote.has(k))), down: need.filter(k => !local.has(k)) });
+  let { up, down } = plan(); if (!up.length && !down.length) return;
+  const r = await syncFetch('/audio'), j = await r.json().catch(() => null);
+  if (!r.ok || !j) throw new Error((j && j.error) || 'Could not check the team songs (' + r.status + ')');
+  syncRemote = new Set(j.ids); ({ up, down } = plan()); down = down.filter(k => syncRemote.has(k));
+  let n = 0, got = 0;
+  for (const k of up) {
+    syncSay('Saving songs and sounds to the team… ' + (++n) + ' of ' + up.length);
+    const rec = await audioGet(k); if (!rec) continue;
+    if (rec.data.byteLength > 24e6) { toast('"' + (rec.name || 'A song') + '" is too big to sync (24 MB max)', 4000); syncRemote.add(k); continue; }
+    const pr = await syncFetch('/audio/' + k, { method: 'PUT', headers: { 'Content-Type': rec.type || 'audio/mpeg', 'X-Audio-Name': encodeURIComponent((rec.name || '').slice(0, 100)) }, body: rec.data });
+    if (!pr.ok) { const e = await pr.json().catch(() => null); throw new Error((e && e.error) || 'Could not save a song to the team (' + pr.status + ')'); }
+    syncRemote.add(k);
+  }
+  n = 0;
+  for (const k of down) {
+    syncSay('Getting songs and sounds from the team… ' + (++n) + ' of ' + down.length);
+    const gr = await syncFetch('/audio/' + k); if (gr.status === 404) continue;
+    if (!gr.ok) throw new Error('Could not get a song from the team (' + gr.status + ')');
+    let name = ''; try { name = decodeURIComponent(gr.headers.get('X-Audio-Name') || ''); } catch (e) {}
+    await audioSet(k, { data: await gr.arrayBuffer(), type: gr.headers.get('content-type') || 'audio/mpeg', name }); got++;
+  }
+  if (got) { toast('Team songs and sounds are on this phone'); if (!$('#sheet').classList.contains('open')) render(); }
+}
+async function syncRun() {
+  if (!syncOn()) return;
+  if (syncBusy) { syncAgain = true; return; }
+  if (navigator.onLine === false) return syncSay('No signal. Changes will save to the team when you are back online.');
+  syncBusy = true;
+  try {
+    if (!syncMsg || /^(No signal|Team sync)/.test(syncMsg)) syncSay('Checking the team copy…');
+    const r = await syncFetch('?v=' + sync.v), j = await r.json().catch(() => null);
+    if (!r.ok || !j) throw new Error((j && j.error) || (r.status === 404 ? 'the app server was not found' : 'error ' + r.status));
+    const mine = syncPayload(), dirty = mine !== sync.last;
+    let push = false, wait = false;
+    if (j.data && JSON.stringify(j.data) !== mine) {
+      const old = dirty && sync.dirtyAt && Date.now() - sync.dirtyAt > 120000;
+      if (!dirty || (old && !confirm('This phone and the team copy were both changed.\n\nOK = keep this phone\'s version\nCancel = use the team copy'))) {
+        if ($('#sheet').classList.contains('open')) wait = true; else syncApply(j.data);
+      } else push = true;
+    } else if (j.data) { sync.last = mine; sync.dirtyAt = 0; }
+    else if (j.v === 0 || dirty) push = true;
+    if (wait) syncAgain = true;
+    else {
+      sync.v = j.v;
+      if (push) {
+        const pr = await syncFetch('?base=' + sync.v, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: mine }), pj = await pr.json().catch(() => null);
+        if (pr.status === 409) syncAgain = true;
+        else if (!pr.ok || !pj) throw new Error((pj && pj.error) || 'error ' + pr.status);
+        else { sync.v = pj.v; sync.last = mine; sync.dirtyAt = 0; }
+      }
+      await syncAudio();
+      sync.at = Date.now();
+      syncSay('Saved to the team · ' + new Date(sync.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
+    }
+  } catch (e) { syncSay('Team sync is not working right now: ' + String(e && e.message || e)); }
+  syncBusy = false; syncSave();
+  if (syncAgain) { syncAgain = false; setTimeout(syncRun, 3000); }
+}
+async function syncConnect() {
+  const code = ($('#sync-code').value || '').trim();
+  if (code.length < 6) return toast('Use a team code with at least 6 characters');
+  if (navigator.onLine === false) return toast('You need a signal to turn on team sync');
+  sync = { code, v: 0, last: '', at: 0, dirtyAt: 0 }; syncRemote = null; syncSay('Connecting…');
+  const cancel = m => { sync = { code: '', v: 0, last: '', at: 0, dirtyAt: 0 }; syncSay(m || ''); };
+  try {
+    const r = await syncFetch('?v=-1'), j = await r.json().catch(() => null);
+    if (!r.ok || !j) throw new Error((j && j.error) || 'Could not reach the app server (' + r.status + ')');
+    if (j.data) {
+      const has = data.teams.some(t => t.players.length) || S().sfx.length;
+      if (has && !confirm('This team code already has a saved team.\n\nOK = replace what is on this phone with the team copy\nCancel = do not connect')) return cancel();
+      syncApply(j.data); sync.v = j.v;
+    } else if (!confirm('Nothing is saved under this team code yet.\n\nSave this phone\'s players, songs and sounds as the team copy?')) return cancel();
+    await syncSave(); renderSettings(); syncRun();
+  } catch (e) { cancel(String(e && e.message || e)); }
+}
+function syncOff() {
+  if (!confirm('Turn off team sync on this phone? Everything stays on this phone and in the team copy.')) return;
+  sync = { code: '', v: 0, last: '', at: 0, dirtyAt: 0 }; syncMsg = ''; syncSave(); renderSettings();
+}
+setInterval(() => { if (document.visibilityState === 'visible') syncRun(); }, 60000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncRun(); });
 
 /* ---- sheet ---- */
 function openSheet(html) { const s = $('#sheet'); s.innerHTML = '<div class="sheet-card">' + html + '</div>'; s.classList.add('open'); document.body.style.overflow = 'hidden'; }
@@ -1014,7 +1139,8 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
   if (!data.settings.v3) { data.settings.engine = 'pro'; data.settings.depth = 1; data.settings.v3 = true; save(); }
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
   try { speechSynthesis.onvoiceschanged = () => view === 'settings' && renderSettings(); } catch (e) {}
-  render(); syncDugout();
+  try { const sv = await kvGet('sync'); if (sv && sv.code) sync = { ...sync, ...sv }; } catch (e) {}
+  render(); syncDugout(); syncRun();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
 </script>
