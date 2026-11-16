@@ -1,9 +1,12 @@
 import UIKit
 import Capacitor
 
-// Registers the app's own Apple Music plugin with the web view.
+// Makes sure the app's own Apple Music plugin is registered with the web view. The plugin is also listed
+// in capacitor.config.json (packageClassList) by scripts/ios-setup.sh, which is the usual way plugins load.
 class MainViewController: CAPBridgeViewController {
     override open func capacitorDidLoad() {
-        bridge?.registerPluginInstance(AppleMusicPlugin())
+        if bridge?.plugin(withName: "AppleMusic") == nil {
+            bridge?.registerPluginInstance(AppleMusicPlugin())
+        }
     }
 }
