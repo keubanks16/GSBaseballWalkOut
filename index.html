@@ -78,6 +78,9 @@ body.np-on #np{display:flex}
 .fr{border:2px solid transparent}
 .fr.on{border-color:var(--accent);background:#12336A}
 .fr .info{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cat{display:flex;align-items:center;gap:6px}
+.cat span{flex:1}
+.cat button{padding:5px 9px;font-size:13px;color:var(--text);font-weight:400}
 .find{display:flex;gap:8px;margin-top:8px}
 .find button{flex:none}
 .sec{background:var(--card);border-radius:14px;padding:4px 14px 14px;margin:12px 0}
@@ -669,14 +672,34 @@ async function deletePlayer() {
 
 /* ---- sounds ---- */
 let sfxEdit = false;
+const cats = () => (S().sfxCats ||= []);
+function catAdd() {
+  const n = (prompt('Category name? (e.g. Strikeouts, Home runs, Between innings)') || '').trim().slice(0, 30); if (!n) return null;
+  const c = cats(), hit = c.find(x => x.toLowerCase() === n.toLowerCase()); if (hit) return hit;
+  c.push(n); save(); return n;
+}
+function catNew() { if (catAdd()) renderSounds(); }
+function catRename(i) {
+  const c = cats(), old = c[i], n = (prompt('Rename category', old) || '').trim().slice(0, 30); if (!n || n === old) return;
+  if (c.some((x, k) => k !== i && x.toLowerCase() === n.toLowerCase())) return toast('You already have that category');
+  c[i] = n; S().sfx.forEach(x => { if (x.cat === old) x.cat = n; }); save(); renderSounds();
+}
+function catDel(i) {
+  const c = cats(), old = c[i]; if (!confirm('Delete the "' + old + '" category? Its sounds are kept and move to Other sounds.')) return;
+  c.splice(i, 1); S().sfx.forEach(x => { if (x.cat === old) delete x.cat; }); save(); renderSounds();
+}
+function catMove(i, d) { const c = cats(), k = i + d; if (k < 0 || k >= c.length) return; [c[i], c[k]] = [c[k], c[i]]; save(); renderSounds(); }
 function renderSounds() {
-  const custom = S().sfx;
+  const c = cats(), all = S().sfx;
+  const pad = s => `<div class="pad" data-id="${s.id}" onclick="${sfxEdit ? `editSfx('${s.id}')` : `playSfx('${s.id}')`}"><span>${esc(s.emoji || '🔊')}</span>${esc(s.name)}${sfxEdit ? '<small>tap to edit</small>' : ''}</div>`;
+  const grid = (list, ci) => `<div class="grid ${sfxEdit ? 'editing' : ''}">${list.map(pad).join('')}${ci == null || sfxEdit || !list.length ? `<div class="pad add" onclick="editSfx(null, ${ci})"><span>＋</span>Add sound</div>` : ''}</div>`;
   $('#v-sounds').innerHTML = `
     <div class="tools" style="margin-top:4px"><button onclick="stopSfx()">■ Stop sound</button><button onclick="sfxEdit=!sfxEdit;renderSounds()">${sfxEdit ? '✓ Done editing' : '✏️ Edit my sounds'}</button></div>
-    <h3>My sounds</h3>
-    <div class="grid ${sfxEdit ? 'editing' : ''}">${custom.map(s => `<div class="pad" data-id="${s.id}" onclick="${sfxEdit ? `editSfx('${s.id}')` : `playSfx('${s.id}')`}"><span>${esc(s.emoji || '🔊')}</span>${esc(s.name)}${sfxEdit ? '<small>tap to edit</small>' : ''}</div>`).join('')}
-      <div class="pad add" onclick="editSfx()"><span>＋</span>Add sound</div></div>
-    <p class="hint" style="margin-top:14px">Add clips like a strikeout song, home run horn, “Let's go!” chant, or between-innings music. Tap again to stop.</p>
+    ${c.map((name, i) => `<h3 class="cat"><span>${esc(name)}</span>${sfxEdit ? `<button onclick="catMove(${i},-1)">↑</button><button onclick="catMove(${i},1)">↓</button><button onclick="catRename(${i})">Rename</button><button onclick="catDel(${i})">Delete</button>` : ''}</h3>` + grid(all.filter(x => x.cat === name), i)).join('')}
+    <h3>${c.length ? 'Other sounds' : 'My sounds'}</h3>
+    ${grid(all.filter(x => !x.cat || !c.includes(x.cat)), null)}
+    <div class="tools"><button onclick="catNew()">＋ Add category</button></div>
+    <p class="hint">Add clips like a strikeout song, home run horn, “Let's go!” chant, or between-innings music. Tap again to stop. Use categories to group them, then “Edit my sounds” to move a sound into one.</p>
     <h3>Find a sound</h3>
     <form class="find" onsubmit="event.preventDefault();findSfx()"><input id="find-q" type="search" value="${esc(find.q)}" placeholder="e.g. sad trombone" enterkeyhint="search" autocapitalize="off" autocomplete="off"><button class="gold">Search</button></form>
     <div id="find-out">${findHtml()}</div>`;
@@ -746,21 +769,23 @@ async function addFind(i, btn) {
   } catch (e) { if (btn) { btn.disabled = false; btn.textContent = '＋ Add'; } toast('Could not add that sound'); }
 }
 let sx = null;
-function editSfx(id) {
+function editSfx(id, ci) {
   const o = id && S().sfx.find(x => x.id === id);
-  sx = o ? { ...o } : { id: uid(), name: '', emoji: '🔊', audioId: null, vol: 100 }; sx.isNew = !o;
+  sx = o ? { ...o } : { id: uid(), name: '', emoji: '🔊', audioId: null, vol: 100, cat: (ci != null && cats()[ci]) || '' }; sx.isNew = !o;
   renderSfxEditor();
 }
 function renderSfxEditor() {
   openSheet(`<div class="sheet-head"><button onclick="closeSheet()">Cancel</button><b>${sx.isNew ? 'Add Sound' : 'Edit Sound'}</b><button class="gold" onclick="saveSfx()">Save</button></div>
     <div class="row"><label>Name<input id="s-name" value="${esc(sx.name)}" placeholder="e.g. Strikeout"></label><label class="sm">Emoji<input id="s-emo" value="${esc(sx.emoji)}" maxlength="4"></label></div>
+    <label>Category<select id="s-cat" onchange="pickCat(this)"><option value="">None</option>${cats().map(n => `<option value="${esc(n)}" ${sx.cat === n ? 'selected' : ''}>${esc(n)}</option>`).join('')}<option value="__new">＋ New category…</option></select></label>
     <h3>Audio clip</h3>
     <div class="songbox"><div class="nm">${sx._file ? esc(sx._file.name) : sx.audioId ? '✅ Clip saved' : '<span class="mut">No clip chosen</span>'}</div>
       <label class="filebtn">Choose<input type="file" onchange="pickSfx(this)"></label></div>
     <label>Volume <span class="vals" id="sv">${sx.vol}%</span><input id="s-vol" type="range" min="10" max="100" step="5" value="${sx.vol}" oninput="$('#sv').textContent=this.value+'%'"></label>
     ${sx.isNew ? '' : '<button class="danger big" onclick="delSfx()">Delete sound</button>'}`);
 }
-function readSfx() { sx.name = $('#s-name').value.trim(); sx.emoji = $('#s-emo').value.trim() || '🔊'; sx.vol = +$('#s-vol').value; }
+function readSfx() { sx.name = $('#s-name').value.trim(); sx.emoji = $('#s-emo').value.trim() || '🔊'; sx.vol = +$('#s-vol').value; const cv = $('#s-cat').value; if (cv !== '__new') sx.cat = cv; }
+function pickCat(sel) { if (sel.value !== '__new') return; readSfx(); const n = catAdd(); if (n) sx.cat = n; renderSfxEditor(); }
 async function pickSfx(inp) { const f = inp.files[0]; if (!f) return; readSfx(); const buf = await f.arrayBuffer(); try { await decodeRaw(buf); } catch (e) { toast("That file couldn't be read as audio. Try an MP3 or M4A."); return; } sx._file = { data: buf, type: f.type || 'audio/mpeg', name: f.name.replace(/\.[^.]+$/, '') }; if (!sx.name) sx.name = sx._file.name; renderSfxEditor(); }
 async function saveSfx() {
   readSfx(); if (!sx.name) return toast('Give the sound a name');
