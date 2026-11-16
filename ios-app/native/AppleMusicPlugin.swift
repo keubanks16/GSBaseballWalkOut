@@ -13,7 +13,8 @@ public class AppleMusicPlugin: CAPPlugin, CAPBridgedPlugin, MPMediaPickerControl
         CAPPluginMethod(name: "pick", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "play", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "status", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "status", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "ping", returnType: CAPPluginReturnPromise)
     ]
 
     // Two ways to play: inside this app, or by driving the phone's own Music app (the fallback).
@@ -39,6 +40,11 @@ public class AppleMusicPlugin: CAPPlugin, CAPBridgedPlugin, MPMediaPickerControl
         MPMediaLibrary.requestAuthorization { status in
             if status == .authorized { run() } else { call.reject("Allow Media & Apple Music for GS Walkout in the iPhone Settings app, then try again.") }
         }
+    }
+
+    // ping() -> { ok, auth }: answers right away without touching the music player (used to check the plugin loaded).
+    @objc func ping(_ call: CAPPluginCall) {
+        call.resolve(["ok": true, "auth": authName()])
     }
 
     @objc func pick(_ call: CAPPluginCall) {
