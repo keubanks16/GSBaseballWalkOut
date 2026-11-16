@@ -204,7 +204,7 @@ setInterval(() => {
 }, 1000);
 function resetAudio() {
   const old = ctx; ctx = null; master = null; acStuck = false; acLastT = -1;
-  try { cur = null; voiceSrc = null; sfxCur = null; noiseBuf = null; np = null; } catch (e) {}
+  try { cur = null; voiceSrc = null; sfxCur = null; np = null; } catch (e) {}
   bufCache.clear(); clipCache.clear(); for (const k in IR) delete IR[k];
   try { old && old.close && old.close().catch(() => {}); } catch (e) {}
 }
@@ -421,44 +421,13 @@ let sfxCur = null;
 function stopSfx() { if (sfxCur) { sfxCur.stop(); sfxCur = null; markSfx(); } }
 function sfxBus() { const g = ctx.createGain(); g.connect(master); return g; }
 function busStop(g, extra) { return () => { const n = ctx.currentTime; g.gain.cancelScheduledValues(n); g.gain.setValueAtTime(g.gain.value, n); g.gain.linearRampToValueAtTime(0, n + 0.15); extra && extra(); setTimeout(() => g.disconnect(), 400); }; }
-function organ(g, f, t, d) {
-  [1, 2, 3, 4, 6].forEach((h, i) => {
-    const o = ctx.createOscillator(), a = ctx.createGain(), lvl = [.32, .2, .12, .07, .04][i];
-    o.type = 'sine'; o.frequency.value = f * h;
-    a.gain.setValueAtTime(0, t); a.gain.linearRampToValueAtTime(lvl, t + .012); a.gain.setValueAtTime(lvl, t + d - .03); a.gain.linearRampToValueAtTime(0, t + d);
-    o.connect(a); a.connect(g); o.start(t); o.stop(t + d + .02);
-  });
-}
-function horn(g, t, d) {
-  const lp = ctx.createBiquadFilter(), a = ctx.createGain(); lp.type = 'lowpass'; lp.frequency.value = 2400;
-  a.gain.setValueAtTime(0, t); a.gain.linearRampToValueAtTime(.22, t + .02); a.gain.setValueAtTime(.22, t + d - .05); a.gain.linearRampToValueAtTime(0, t + d);
-  [466, 471, 554, 698].forEach(f => { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(f * .93, t); o.frequency.linearRampToValueAtTime(f, t + .07); o.connect(lp); o.start(t); o.stop(t + d + .02); });
-  lp.connect(a); a.connect(g);
-}
-let noiseBuf;
-function clap(g, t) {
-  if (!noiseBuf) { noiseBuf = ctx.createBuffer(1, ctx.sampleRate * .3, ctx.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
-  const s = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), a = ctx.createGain();
-  s.buffer = noiseBuf; bp.type = 'bandpass'; bp.frequency.value = 1300; bp.Q.value = .9;
-  a.gain.setValueAtTime(0, t); a.gain.linearRampToValueAtTime(.9, t + .004); a.gain.exponentialRampToValueAtTime(.001, t + .16);
-  s.connect(bp); bp.connect(a); a.connect(g); s.start(t); s.stop(t + .2);
-}
-const N = { C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23, G4: 392, A4: 440, B4: 493.88, C5: 523.25, D5: 587.33, E5: 659.25, G5: 783.99, C6: 1046.5 };
-const BUILTIN = [
-  { id: 'b-charge', name: 'Charge!', emoji: '🎺', len: 2.2, play(g, t) { [[N.G4, .17], [N.C5, .17], [N.E5, .17], [N.G5, .34], [N.E5, .17], [N.G5, 1]].forEach(([f, d]) => { organ(g, f, t, d * .92); t += d; }); } },
-  { id: 'b-horn', name: 'Air Horn', emoji: '📯', len: 1.8, play(g, t) { horn(g, t, .22); horn(g, t + .3, .22); horn(g, t + .6, 1); } },
-  { id: 'b-clap', name: "Let's Go Claps", emoji: '👏', len: 4, play(g, t) { for (let r = 0; r < 2; r++) [0, .32, .8, .98, 1.16].forEach(x => clap(g, t + r * 1.9 + x)); } },
-  { id: 'b-rally', name: 'Rally Organ', emoji: '🎹', len: 3.4, play(g, t) { const sc = [N.C4, N.D4, N.E4, N.F4, N.G4, N.A4, N.B4, N.C5]; for (let r = 0; r < 2; r++) sc.forEach((f, i) => organ(g, f * (r ? 2 : 1), t + r * 1.2 + i * .15, .14)); [N.C5, N.E5, N.G5, N.C6].forEach(f => organ(g, f, t + 2.45, .9)); } },
-];
 async function playSfx(id) {
   ac(); setSession('playback');
   if (sfxCur) { const same = sfxCur.id === id; stopSfx(); if (same) return; }
   stopWalkup(0.3);
-  const b = BUILTIN.find(x => x.id === id);
   const g = sfxBus(), me = { id, stop: busStop(g) };
   sfxCur = me; markSfx();
   const done = () => { if (sfxCur === me) { sfxCur = null; markSfx(); } };
-  if (b) { b.play(g, ctx.currentTime + .03); setTimeout(done, b.len * 1000); return; }
   const sx = S().sfx.find(x => x.id === id); if (!sx) return done();
   try {
     const buf = await getBuf(sx.audioId); if (sfxCur !== me || !buf) return done();
@@ -704,8 +673,6 @@ function renderSounds() {
   const custom = S().sfx;
   $('#v-sounds').innerHTML = `
     <div class="tools" style="margin-top:4px"><button onclick="stopSfx()">■ Stop sound</button><button onclick="sfxEdit=!sfxEdit;renderSounds()">${sfxEdit ? '✓ Done editing' : '✏️ Edit my sounds'}</button></div>
-    <h3>Built-in</h3>
-    <div class="grid">${BUILTIN.map(b => `<div class="pad" data-id="${b.id}" onclick="playSfx('${b.id}')"><span>${b.emoji}</span>${esc(b.name)}</div>`).join('')}</div>
     <h3>My sounds</h3>
     <div class="grid ${sfxEdit ? 'editing' : ''}">${custom.map(s => `<div class="pad" data-id="${s.id}" onclick="${sfxEdit ? `editSfx('${s.id}')` : `playSfx('${s.id}')`}"><span>${esc(s.emoji || '🔊')}</span>${esc(s.name)}${sfxEdit ? '<small>tap to edit</small>' : ''}</div>`).join('')}
       <div class="pad add" onclick="editSfx()"><span>＋</span>Add sound</div></div>

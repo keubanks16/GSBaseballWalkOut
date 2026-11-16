@@ -5,7 +5,7 @@ A BallparkDJ-style walkout (walk-up) song app for GS Baseball. Runs in the brows
 - **Roster:** each player gets a song from your Files app, a start point, play length, fade out and volume
 - **Announcer:** built-in announcer voice ("Now batting, number 7, MJ Eubanks!"), your own recorded voice with stadium echo, or none, with an option to play music under the announcement
 - **Game mode:** big "Next up" button that walks through the batting order, tap any player or bench player, fade and stop
-- **Sounds:** Charge!, air horn, claps, rally organ, plus your own clips, and a search that finds sound effects online (Myinstants) and saves them to the phone
+- **Sounds:** your own clips, and a search that finds sound effects online (Myinstants) and saves them to the phone
 - **Multiple teams**, plus a backup file to move everything to another phone
 
 All songs stay on the device (IndexedDB); nothing is uploaded.
