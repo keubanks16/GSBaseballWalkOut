@@ -8,75 +8,75 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="GS Walkout">
-<meta name="theme-color" content="#0b0b0c">
+<meta name="theme-color" content="#04122D">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
 <style>
-:root{--bg:#0b0b0c;--card:#17171a;--card2:#202024;--line:#2c2c32;--gold:#c5b358;--gold2:#e3d27a;--text:#f3f1ea;--mut:#9a978d;--red:#e5484d;--green:#3fbf6f}
+:root{--bg:#04122D;--card:#0A1D40;--card2:#12305F;--line:#1B3364;--accent:#6DA0D6;--accent2:#8FBDF0;--text:#E7EEF9;--mut:#8FA3C4;--on:#04122D;--red:#e5484d;--green:#3fbf6f}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
 body{padding-bottom:calc(76px + env(safe-area-inset-bottom))}
 body.np-on{padding-bottom:calc(160px + env(safe-area-inset-bottom))}
 button{font:inherit;color:inherit;border:0;background:var(--card2);border-radius:12px;padding:10px 14px;cursor:pointer}
 button:active{transform:scale(.97)}
-button.gold{background:var(--gold);color:#111;font-weight:700}
+button.gold{background:var(--accent);color:var(--on);font-weight:700}
 button.ghost{background:transparent;border:1px solid var(--line)}
 button.danger{background:transparent;border:1px solid var(--red);color:var(--red)}
 input,select,textarea{font:inherit;color:var(--text);background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%}
-input[type=range]{padding:0;border:0;background:none;accent-color:var(--gold)}
-input[type=checkbox]{width:auto;accent-color:var(--gold);transform:scale(1.3)}
+input[type=range]{padding:0;border:0;background:none;accent-color:var(--accent)}
+input[type=checkbox]{width:auto;accent-color:var(--accent);transform:scale(1.3)}
 label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}
 label input,label select{margin-top:4px}
 h2{margin:18px 0 8px;font-size:20px}
-h3{margin:22px 0 6px;font-size:16px;color:var(--gold)}
+h3{margin:22px 0 6px;font-size:16px;color:var(--accent)}
 small,.mut{color:var(--mut)}
-header{position:sticky;top:0;z-index:5;background:rgba(11,11,12,.92);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);padding:calc(10px + env(safe-area-inset-top)) 16px 10px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line)}
-.logo{width:40px;height:40px;border-radius:10px;background:var(--gold);color:#111;font-weight:900;display:grid;place-items:center;font-size:17px;letter-spacing:-.5px}
+header{position:sticky;top:0;z-index:5;background:rgba(4,18,45,.92);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);padding:calc(10px + env(safe-area-inset-top)) 16px 10px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line)}
+.logo{width:46px;height:40px;object-fit:contain;flex:none}
 header .t{flex:1;min-width:0}
 header .t b{display:block;font-size:17px}
 header .t small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 main{padding:12px 16px;max-width:720px;margin:0 auto}
 .view{display:none}.view.on{display:block}
-nav{position:fixed;left:0;right:0;bottom:0;z-index:6;display:flex;background:#111113;border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav{position:fixed;left:0;right:0;bottom:0;z-index:6;display:flex;background:#06142B;border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
 nav button{flex:1;background:none;border-radius:0;padding:9px 0 8px;font-size:11px;color:var(--mut);display:flex;flex-direction:column;align-items:center;gap:2px}
 nav button span{font-size:22px;line-height:1}
-nav button.on{color:var(--gold)}
-.nextbtn{width:100%;padding:18px;border-radius:18px;background:linear-gradient(135deg,var(--gold),#a8963f);color:#111;text-align:left;display:flex;align-items:center;gap:14px;box-shadow:0 6px 24px rgba(197,179,88,.18)}
+nav button.on{color:var(--accent)}
+.nextbtn{width:100%;padding:18px;border-radius:18px;background:linear-gradient(135deg,var(--accent),#4F86C6);color:var(--on);text-align:left;display:flex;align-items:center;gap:14px;box-shadow:0 6px 24px rgba(109,160,214,.22)}
 .nextbtn .ic{font-size:34px}
-.nextbtn small{color:#2a2715;font-weight:700;letter-spacing:1px;font-size:12px}
+.nextbtn small{color:#0B2753;font-weight:700;letter-spacing:1px;font-size:12px}
 .nextbtn big{display:block;font-size:22px;font-weight:800}
 .tools{display:flex;gap:8px;margin:12px 0}
 .tools button{flex:1;font-size:14px}
 .card{display:flex;align-items:center;gap:12px;background:var(--card);border:2px solid transparent;border-radius:14px;padding:10px 12px;margin:8px 0;cursor:pointer}
-.card.up{border-color:var(--gold)}
-.card.playing{background:#2a2614;border-color:var(--gold2)}
+.card.up{border-color:var(--accent)}
+.card.playing{background:#12336A;border-color:var(--accent2)}
 .ord{width:22px;text-align:center;color:var(--mut);font-weight:700}
-.jn{width:44px;height:44px;border-radius:50%;background:#000;border:2px solid var(--gold);color:var(--gold);font-weight:800;display:grid;place-items:center;font-size:17px;flex:none}
+.jn{width:44px;height:44px;border-radius:50%;background:#04122D;border:2px solid var(--accent);color:var(--accent);font-weight:800;display:grid;place-items:center;font-size:17px;flex:none}
 .info{flex:1;min-width:0}
 .info b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .info small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pl{font-size:22px;color:var(--gold)}
-.tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.5px;color:#111;background:var(--gold);padding:2px 6px;border-radius:6px;margin-left:6px;vertical-align:2px}
+.pl{font-size:22px;color:var(--accent)}
+.tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--on);background:var(--accent);padding:2px 6px;border-radius:6px;margin-left:6px;vertical-align:2px}
 .warn{color:#f0a04b}
 .empty{background:var(--card);border-radius:16px;padding:22px;text-align:center;margin-top:14px}
 .empty p{color:var(--mut)}
-#np{position:fixed;left:8px;right:8px;bottom:calc(66px + env(safe-area-inset-bottom));z-index:7;background:#1d1b12;border:1px solid var(--gold);border-radius:16px;padding:10px 12px;display:none;align-items:center;gap:10px;box-shadow:0 8px 30px rgba(0,0,0,.6)}
+#np{position:fixed;left:8px;right:8px;bottom:calc(66px + env(safe-area-inset-bottom));z-index:7;background:#0B2753;border:1px solid var(--accent);border-radius:16px;padding:10px 12px;display:none;align-items:center;gap:10px;box-shadow:0 8px 30px rgba(0,0,0,.6)}
 body.np-on #np{display:flex}
 #np .i{flex:1;min-width:0}
 #np b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #np small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bar{height:5px;background:#3a3620;border-radius:4px;margin-top:6px;overflow:hidden}
-.bar i{display:block;height:100%;width:0;background:var(--gold)}
+.bar{height:5px;background:#1B3364;border-radius:4px;margin-top:6px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--accent)}
 #np button{padding:12px 14px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px;margin-top:10px}
 .pad{aspect-ratio:1;border-radius:16px;background:var(--card);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:8px;font-size:13px;font-weight:600;border:2px solid transparent}
 .pad span{font-size:34px}
-.pad.on{border-color:var(--gold);background:#2a2614}
+.pad.on{border-color:var(--accent);background:#12336A}
 .pad.add{border:2px dashed var(--line);color:var(--mut)}
-.editing .pad:not(.add){border-color:#555}
+.editing .pad:not(.add){border-color:#3A5A94}
 .fr{border:2px solid transparent}
-.fr.on{border-color:var(--gold);background:#2a2614}
+.fr.on{border-color:var(--accent);background:#12336A}
 .fr .info{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .find{display:flex;gap:8px;margin-top:8px}
 .find button{flex:none}
@@ -93,10 +93,10 @@ body.np-on #np{display:flex}
 .seg{display:flex;background:var(--card2);border-radius:12px;padding:3px;gap:3px}
 .seg label{flex:1;margin:0;text-align:center;padding:9px 4px;border-radius:9px;font-size:13px;color:var(--text);cursor:pointer}
 .seg input{display:none}
-.seg label:has(input:checked){background:var(--gold);color:#111;font-weight:700}
+.seg label:has(input:checked){background:var(--accent);color:var(--on);font-weight:700}
 .songbox{display:flex;align-items:center;gap:10px;background:var(--card);border-radius:12px;padding:12px}
 .songbox .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.filebtn{display:inline-block;background:var(--gold);color:#111;font-weight:700;border-radius:12px;padding:10px 14px;margin:0;font-size:15px;cursor:pointer;white-space:nowrap}
+.filebtn{display:inline-block;background:var(--accent);color:var(--on);font-weight:700;border-radius:12px;padding:10px 14px;margin:0;font-size:15px;cursor:pointer;white-space:nowrap}
 .filebtn input{display:none}
 audio{width:100%;margin-top:10px}
 .big{width:100%;padding:16px;font-size:17px;margin-top:16px}
@@ -108,8 +108,8 @@ audio{width:100%;margin-top:10px}
 .rec{background:var(--red);color:#fff;font-weight:700}
 .rec.live{animation:pulse 1s infinite}
 @keyframes pulse{50%{opacity:.55}}
-.toast{position:fixed;left:50%;top:calc(70px + env(safe-area-inset-top));transform:translateX(-50%);background:#222;border:1px solid var(--gold);padding:10px 16px;border-radius:12px;z-index:50;font-size:14px;max-width:90%;text-align:center}
-.vals{float:right;color:var(--gold)}
+.toast{position:fixed;left:50%;top:calc(70px + env(safe-area-inset-top));transform:translateX(-50%);background:#0E2550;border:1px solid var(--accent);padding:10px 16px;border-radius:12px;z-index:50;font-size:14px;max-width:90%;text-align:center}
+.vals{float:right;color:var(--accent)}
 .dg{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--mut)}
 .dg span{flex:1}
 .dg button{padding:7px 12px;font-size:13px}
@@ -117,8 +117,8 @@ audio{width:100%;margin-top:10px}
 </head>
 <body>
 <header>
-  <div class="logo">GS</div>
-  <div class="t"><b>Walkout Songs</b><small id="teamName"></small></div>
+  <img class="logo" src="gs-logo.png" alt="GS Baseball">
+  <div class="t"><b>GS Baseball Walkout</b><small id="teamName"></small></div>
 </header>
 
 <main>
