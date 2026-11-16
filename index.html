@@ -875,7 +875,7 @@ function renderSettings() {
 
     <div class="sec"><h3>Apple Music (test)</h3>
       <p class="hint">Lets a player use a song from Apple Music instead of a file (pick it under Roster → player → Walkout song). Each phone needs its own Apple Music subscription and sign-in, and a signal at the field.</p>
-      ${nat() ? '<p class="hint">In the iPhone app this uses the Music app on this phone, so there is nothing to sign in to here.</p>' : ''}
+      ${nat() ? '<p class="hint">In the iPhone app this uses the Music app on this phone, so there is nothing to sign in to here.</p>' + (amDiag ? '<p class="hint"><b>Last Apple Music try:</b> ' + esc(amDiag) + '</p>' : '') : ''}
       <div class="tools" ${nat() ? 'style="display:none"' : ''}>${amKit ? (amKit.isAuthorized ? '<button onclick="amSignOut()">Sign out of Apple Music</button>' : '<button class="gold" onclick="amSignIn()">Sign in to Apple Music</button>') : '<button class="gold" onclick="amSetup()">Connect Apple Music</button>'}</div>
       <p class="hint" id="amStat">${esc(amMsg)}</p></div>
 
@@ -986,12 +986,31 @@ function amStop(fade = 0) {
   if (fade > 0.3) { const v0 = m.volume || 1, t0 = Date.now(); amFade = setInterval(() => { const k = (Date.now() - t0) / (fade * 1000); if (k >= 1) return end(); try { m.volume = v0 * (1 - k); } catch (e) {} }, 60); }
   else end();
 }
+// iPhone app: start the song in the app's own player; if that does not get going, drive the phone's Music app
+// instead. Whatever happens is written down (amDiag) so it can be read under Settings → Apple Music.
+let amDiag = '';
+const amWait = ms => new Promise(r => setTimeout(r, ms));
+const amCall = (m, o, ms) => Promise.race([amNative(m, o).then(r => r || {}, e => ({ error: amErr(e) })), amWait(ms).then(() => ({ timeout: true }))]);
+async function amNativeStart(p, st, gone) {
+  const C = nat(), hdr = ((C.PluginHeaders || []).some(h => h && h.name === 'AppleMusic') ? 'yes' : 'no');
+  const args = { persistentId: String(p.am.pid || ''), storeId: String(p.am.id || ''), start: st }, log = [];
+  for (const system of [false, true]) {
+    const r = await amCall('play', { ...args, system }, 6000); if (gone()) return;
+    let s = {};
+    for (let i = 0; i < 4 && !r.error; i++) { await amWait(900); if (gone()) return; s = await amCall('status', {}, 2500); if (s.state === 1) break; }
+    log.push((system ? 'Music app' : 'in-app') + ': ' + (r.error ? 'error ' + r.error : r.timeout ? 'no answer' : r.steps || 'ok') + ' → ' + (s.timeout ? 'status no answer' : 'state ' + (s.state ?? '?') + (s.item ? ' “' + s.item + '”' : '') + ', access ' + (s.auth || '?')));
+    amDiag = new Date().toLocaleTimeString() + ' · ' + p.am.name + ' [lib ' + (args.persistentId ? 'yes' : 'no') + ', store ' + (args.storeId || 'none') + ', plugin ' + hdr + '] ' + log.join(' | ');
+    if (s.state === 1) return;
+    if (r.error && /Settings app/.test(r.error)) throw new Error(r.error);
+  }
+  throw new Error('Apple Music did not play the song. Details are under Settings → Apple Music.');
+}
 async function amPlay(p, tok) {
   const fail = m => { if (tok !== playToken) return; amCur = null; np = null; renderNP(); toast(m, 4000); };
   if (nat()) {
     try {
       const me = amCur = { p, tok, started: false }, st = +p.start || 0;
-      await Promise.race([amNative('play', { persistentId: String(p.am.pid || ''), storeId: String(p.am.id || ''), start: st }), new Promise((_, rej) => setTimeout(() => rej(new Error('Apple Music did not start the song. Open the Music app once, make sure the song plays there, then try again.')), 12000))]);
+      await amNativeStart(p, st, () => tok !== playToken || amCur !== me);
       if (tok !== playToken || amCur !== me) { if (amCur === me) amCur = null; amNative('stop').catch(() => {}); return; }
       me.started = true; if (np) np.phase = 'music'; renderNP();
       const L = +p.length || 0, total = L > 0 ? L : Math.max(2, (+p.am.dur || 240) - st);
