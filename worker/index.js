@@ -160,10 +160,41 @@ async function teamSync(request, env, url) {
   return json({ ok: true });
 }
 
+// Apple Music (test): signs the MusicKit developer token with the key saved as Worker secrets, and searches the catalog.
+let appleTok = null;
+const b64url = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+async function appleToken(env) {
+  if (!env.APPLE_TEAM_ID || !env.APPLE_KEY_ID || !env.APPLE_MUSIC_KEY) throw new Error('The Apple Music key is not saved in Cloudflare yet (APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_MUSIC_KEY)');
+  const now = Math.floor(Date.now() / 1000);
+  if (appleTok && appleTok.exp - now > 3600) return appleTok;
+  const pem = String(env.APPLE_MUSIC_KEY).replace(/-----[^-]+-----/g, '').replace(/\\n/g, '').replace(/[^A-Za-z0-9+/=]/g, '');
+  let key;
+  try { key = await crypto.subtle.importKey('pkcs8', b64(pem), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']); }
+  catch (e) { throw new Error('APPLE_MUSIC_KEY in Cloudflare is not a valid .p8 key. Paste the whole file, including the BEGIN and END lines.'); }
+  const enc = o => b64url(new TextEncoder().encode(JSON.stringify(o))), exp = now + 12 * 3600;
+  const head = enc({ alg: 'ES256', kid: String(env.APPLE_KEY_ID).trim() }) + '.' + enc({ iss: String(env.APPLE_TEAM_ID).trim(), iat: now, exp });
+  const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, new TextEncoder().encode(head));
+  return appleTok = { token: head + '.' + b64url(sig), exp };
+}
+async function appleMusic(env, url) {
+  try {
+    const t = await appleToken(env);
+    if (url.pathname === '/api/music/token') return json(t);
+    const q = (url.searchParams.get('q') || '').replace(/\s+/g, ' ').trim().slice(0, 80); if (!q) return err('No search words', 400);
+    const sf = /^[a-z]{2}$/.test(url.searchParams.get('sf') || '') ? url.searchParams.get('sf') : 'us';
+    const r = await fetch('https://api.music.apple.com/v1/catalog/' + sf + '/search?types=songs&limit=20&term=' + encodeURIComponent(q), { headers: { Authorization: 'Bearer ' + t.token } });
+    if (r.status === 401 || r.status === 403) return err('Apple did not accept the key (' + r.status + '). Check that the Team ID and Key ID in Cloudflare match the key.', 502);
+    if (!r.ok) return err('Apple Music search failed (' + r.status + ')', 502);
+    const j = await r.json(), list = (j.results && j.results.songs && j.results.songs.data) || [];
+    return json({ results: list.map(x => ({ id: x.id, name: x.attributes.name, artist: x.attributes.artistName, dur: Math.round((x.attributes.durationInMillis || 0) / 1000), clean: x.attributes.contentRating !== 'explicit' })) });
+  } catch (e) { return err(String(e && e.message || e).slice(0, 300), 500); }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === '/api/dugout') return dugout(env, url.search);
+    if (url.pathname === '/api/music/token' || url.pathname === '/api/music/search') return request.method === 'OPTIONS' ? new Response(null, { headers: CORS }) : appleMusic(env, url);
     if (url.pathname === '/api/sync' || url.pathname.startsWith('/api/sync/')) { try { return await teamSync(request, env, url); } catch (e) { return err('Team sync had a problem: ' + String(e && e.message || e).slice(0, 200), 502); } }
     if (url.pathname === '/api/sfx' || url.pathname === '/api/sfx/clip') {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
