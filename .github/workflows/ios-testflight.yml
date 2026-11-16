@@ -1,0 +1,133 @@
+# Builds GS Walkout's iPhone app on a GitHub Mac and uploads it to App Store Connect (TestFlight).
+# Starts on every push to the ios-release branch, or from GitHub: Actions ->
+# "iOS: build and upload to TestFlight" -> Run workflow.
+# Needs four repository secrets: APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8
+# (the same App Store Connect API key The Sports Hub uses). Without them it only checks that the app builds.
+name: "iOS: build and upload to TestFlight"
+
+on:
+  push:
+    branches: ['ios-release']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version shown in TestFlight (e.g. 1.0.0). Leave empty to use ios-app/package.json."
+        required: false
+
+concurrency:
+  group: ios-release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: ios-app
+
+jobs:
+  ios:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check secrets
+        id: secrets
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          missing=""
+          for v in APPLE_TEAM_ID ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8; do
+            [ -n "${!v}" ] || missing="$missing $v"
+          done
+          if [ -n "$missing" ]; then
+            echo "::warning::Build check only, nothing uploaded. Add these repository secrets to upload to TestFlight:$missing"
+            echo "ready=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=yes" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build the iOS project
+        run: bash scripts/ios-setup.sh
+
+      - name: Build check (no signing)
+        if: steps.secrets.outputs.ready != 'yes'
+        run: |
+          set -o pipefail
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build 2>&1 | tee "$RUNNER_TEMP/build.log" | tail -n 400 || {
+              grep -E "error:" "$RUNNER_TEMP/build.log" | sort -u | head -n 20 | while IFS= read -r line; do echo "::error::${line}"; done
+              exit 1
+            }
+          echo "The app builds. Add the four secrets to upload it to TestFlight." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: App Store Connect API key
+        if: steps.secrets.outputs.ready == 'yes'
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/keys"
+          # The secret can be the .p8 file's text as is, or base64 of it.
+          if printf '%s' "$ASC_KEY_P8" | grep -q 'BEGIN PRIVATE KEY'; then printf '%s\n' "$ASC_KEY_P8"; else printf '%s' "$ASC_KEY_P8" | base64 --decode; fi > "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8"
+          echo "ASC_KEY_PATH=$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8" >> "$GITHUB_ENV"
+
+      - name: Free a development certificate slot
+        if: steps.secrets.outputs.ready == 'yes'
+        run: node scripts/asc-certs.mjs
+
+      - name: Archive
+        if: steps.secrets.outputs.ready == 'yes'
+        run: |
+          set -o pipefail
+          VERSION="${{ github.event.inputs.version || '' }}"
+          [ -n "$VERSION" ] || VERSION="$(node -p "require('./package.json').version")"
+          BUILD="${{ github.run_number }}"
+          echo "Version $VERSION ($BUILD)"
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" \
+            archive 2>&1 | tee "$RUNNER_TEMP/build.log" | tail -n 400 || {
+              grep -E "error:" "$RUNNER_TEMP/build.log" | sort -u | head -n 20 | while IFS= read -r line; do echo "::error::${line}"; done
+              exit 1
+            }
+
+      - name: Upload to App Store Connect
+        if: steps.secrets.outputs.ready == 'yes'
+        run: |
+          set -o pipefail
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$APPLE_TEAM_ID</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" 2>&1 | tee "$RUNNER_TEMP/export.log" | tail -n 200 || {
+              grep -iE "error" "$RUNNER_TEMP/export.log" | sort -u | head -n 20 | while IFS= read -r line; do echo "::error::${line}"; done
+              exit 1
+            }
+          echo "Uploaded. The build shows up in App Store Connect -> TestFlight in about 5-15 minutes." >> "$GITHUB_STEP_SUMMARY"

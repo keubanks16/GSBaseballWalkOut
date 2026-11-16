@@ -14,6 +14,10 @@ Songs are kept on the device (IndexedDB) so games work with no signal.
 
 A player can use an Apple Music song instead of a file. The Worker signs the MusicKit developer token from three secrets (`APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_MUSIC_KEY`) and searches the catalog; the app plays the song with MusicKit JS. Each phone signs in with its own Apple Music subscription and needs a signal.
 
+## iPhone app (TestFlight)
+
+`ios-app/` wraps this web app in a native iPhone app with Capacitor (bundle ID `com.kollinmeubanks.gswalkout`) and adds a small Apple Music plugin so songs from the phone's Music library can be walkout songs. `.github/workflows/ios-testflight.yml` builds it on a GitHub Mac and uploads to TestFlight on every push to the `ios-release` branch. It needs the repository secrets `APPLE_TEAM_ID`, `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8`; without them it only checks that the app builds.
+
 ## Team sync
 
 Settings → Team sync saves everything (players, songs, sounds, announcer clips, settings) to the Worker's KV namespace (`SYNC`) under a team code. Any phone that enters the same code gets the same setup and stays in step. Only the hash of the code is stored. Audio files up to 24 MB each.

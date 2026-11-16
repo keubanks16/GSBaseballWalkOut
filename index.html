@@ -323,7 +323,7 @@ const proReady = p => !!(p.proId && p.proKey === proKey(p));
 const proMem = new Map();
 function fetchPro(key, text) {
   if (!proMem.has(key)) {
-    const pr = fetch((S().server || '').trim().replace(/\/$/, '') + '/api/announce', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, engine: isBasic() ? 'basic' : 'pro', voice: isBasic() ? S().speaker : elVoice(), style: S().style }) })
+    const pr = fetch(api('/api/announce'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, engine: isBasic() ? 'basic' : 'pro', voice: isBasic() ? S().speaker : elVoice(), style: S().style }) })
       .then(async r => {
         const ct = r.headers.get('content-type') || '';
         if (r.ok && ct.includes('audio')) return r.arrayBuffer();
@@ -398,7 +398,7 @@ async function playWalkup(p) {
   const tok = ++playToken;
   np = { p, phase: 'intro' }; renderNP();
   const am = p.am && p.am.id, clipP = am ? Promise.resolve(null) : getClip(p).catch(() => null);
-  if (am) amLoad().catch(() => {});
+  if (am && !nat()) amLoad().catch(() => {});
   const mode = p.announce || 'tts';
   let introDone; const introP = new Promise(r => introDone = once(r));
   if (mode === 'tts') speak(announceText(p), introDone);
@@ -565,11 +565,11 @@ function renderEditor() {
       <label class="filebtn">${songName ? 'Change' : 'Choose song'}<input type="file" onchange="pickSong(this)"></label></div>
     <p class="hint">Pick an MP3/M4A from your Files app. Songs are saved on this device.</p>
     <div class="songbox" style="margin-top:8px"><div class="nm">${p.am ? '🍎 ' + esc(p.am.name) + ' · ' + esc(p.am.artist) : '<span class="mut">Or use an Apple Music song (test)</span>'}</div>
-      <button onclick="amPickOpen()">${p.am ? 'Change' : 'Search'}</button>${p.am ? '<button onclick="amClear()">✕</button>' : ''}</div>
+      ${nat() ? '<button class="gold" onclick="amPickLib()">My Music</button>' : ''}<button onclick="amPickOpen()">${p.am && !nat() ? 'Change' : 'Search'}</button>${p.am ? '<button onclick="amClear()">✕</button>' : ''}</div>
     ${edit.am ? `<form class="find" onsubmit="event.preventDefault();amSearch()"><input id="am-q" type="search" value="${esc(edit.am.q)}" placeholder="Song or artist" enterkeyhint="search" autocomplete="off"><button class="gold">Search</button></form>
       ${edit.am.busy ? '<p class="hint">Searching Apple Music…</p>' : edit.am.err ? `<p class="hint warn">${esc(edit.am.err)}</p>` : (edit.am.list || []).map((x, i) => `<div class="lu" onclick="amChoose(${i})"><div class="info"><b>${esc(x.name)}${x.clean ? '' : ' <span class="tag">E</span>'}</b><small>${esc(x.artist)} · ${fmt(x.dur)}</small></div><button class="gold">Use</button></div>`).join('') || (edit.am.list ? '<p class="hint">No songs found.</p>' : '')}` : ''}
     ${p.am ? `<label>Start at (seconds)<input id="f-start" type="number" inputmode="decimal" step="0.5" min="0" value="${+p.start || 0}"></label>
-    <p class="hint">Apple Music songs stream, so this phone needs a signal and an Apple Music sign-in (Settings → Apple Music). The Apple Music song is used instead of the file above. Fade out, volume and “music under the announcement” may not work with it on iPhone.</p>` : ''}
+    <p class="hint">${nat() ? 'Plays from the Music app on this phone. Songs downloaded in your library work with no signal; others stream with an Apple Music subscription.' : 'Apple Music songs stream, so this phone needs a signal and an Apple Music sign-in (Settings → Apple Music).'} The Apple Music song is used instead of the file above. Fade out, song volume and “music under the announcement” do not apply to it.</p>` : ''}
     ${songName && !p.am ? `<audio id="f-audio" controls preload="metadata" playsinline></audio>
     <div class="row"><label>Start at (seconds)<input id="f-start" type="number" inputmode="decimal" step="0.5" min="0" value="${+p.start || 0}"></label>
       <button style="flex:0 0 auto;margin-bottom:1px" onclick="markStart()">⏱ Use spot playing now</button></div>
@@ -719,6 +719,9 @@ const findRaw = new Map();
 // Opened from GitHub Pages (or anywhere that isn't the Cloudflare app)? Use the Cloudflare app's server for sound search.
 const SFX_SERVER = 'https://gsbaseballwalkout.kollinmeubanks.workers.dev';
 const api = p => ((S().server || '').trim().replace(/\/$/, '') || (/\.workers\.dev$/.test(location.hostname) ? '' : SFX_SERVER)) + p;
+// Inside the iPhone app (Capacitor): native Apple Music through the app's own plugin.
+const nat = () => { const C = window.Capacitor; return C && C.isNativePlatform && C.isNativePlatform() ? C : null; };
+const amNative = (m, o = {}) => { const C = nat(), P = C.Plugins && C.Plugins.AppleMusic; return P && P[m] ? P[m](o) : C.nativePromise('AppleMusic', m, o); };
 function findHtml() {
   if (find.busy) return '<p class="hint">Searching…</p>';
   if (find.err) return `<p class="hint warn">${esc(find.err)}</p>`;
@@ -858,7 +861,8 @@ function renderSettings() {
 
     <div class="sec"><h3>Apple Music (test)</h3>
       <p class="hint">Lets a player use a song from Apple Music instead of a file (pick it under Roster → player → Walkout song). Each phone needs its own Apple Music subscription and sign-in, and a signal at the field.</p>
-      <div class="tools">${amKit ? (amKit.isAuthorized ? '<button onclick="amSignOut()">Sign out of Apple Music</button>' : '<button class="gold" onclick="amSignIn()">Sign in to Apple Music</button>') : '<button class="gold" onclick="amSetup()">Connect Apple Music</button>'}</div>
+      ${nat() ? '<p class="hint">In the iPhone app this uses the Music app on this phone, so there is nothing to sign in to here.</p>' : ''}
+      <div class="tools" ${nat() ? 'style="display:none"' : ''}>${amKit ? (amKit.isAuthorized ? '<button onclick="amSignOut()">Sign out of Apple Music</button>' : '<button class="gold" onclick="amSignIn()">Sign in to Apple Music</button>') : '<button class="gold" onclick="amSetup()">Connect Apple Music</button>'}</div>
       <p class="hint" id="amStat">${esc(amMsg)}</p></div>
 
     <div class="sec"><h3>Team sync</h3>
@@ -962,6 +966,7 @@ function amLoad() {
 }
 function amStop(fade = 0) {
   clearTimeout(amTimer); clearInterval(amFade);
+  if (nat()) { const was = amCur; amCur = null; if (was) amNative('stop').catch(() => {}); return; }
   const m = amKit, was = amCur; amCur = null; if (!m || !was) return;
   const end = () => { clearInterval(amFade); try { Promise.resolve(m.stop()).catch(() => {}); } catch (e) {} try { m.volume = 1; } catch (e) {} };
   if (fade > 0.3) { const v0 = m.volume || 1, t0 = Date.now(); amFade = setInterval(() => { const k = (Date.now() - t0) / (fade * 1000); if (k >= 1) return end(); try { m.volume = v0 * (1 - k); } catch (e) {} }, 60); }
@@ -969,6 +974,17 @@ function amStop(fade = 0) {
 }
 async function amPlay(p, tok) {
   const fail = m => { if (tok !== playToken) return; amCur = null; np = null; renderNP(); toast(m, 4000); };
+  if (nat()) {
+    try {
+      const me = amCur = { p, tok, started: false }, st = +p.start || 0;
+      await amNative('play', { persistentId: String(p.am.pid || ''), storeId: String(p.am.id || ''), start: st });
+      if (tok !== playToken || amCur !== me) { if (amCur === me) amCur = null; amNative('stop').catch(() => {}); return; }
+      me.started = true; if (np) np.phase = 'music'; renderNP();
+      const L = +p.length || 0, total = L > 0 ? L : Math.max(2, (+p.am.dur || 240) - st);
+      amTimer = setTimeout(() => { if (amCur === me) { if (L > 0) amStop(); else amCur = null; np = null; renderNP(); } }, total * 1000);
+    } catch (e) { fail(amErr(e)); }
+    return;
+  }
   try {
     const m = await amLoad(); if (tok !== playToken) return;
     if (!m.isAuthorized) return fail('Sign in to Apple Music first: Settings → Apple Music');
@@ -991,6 +1007,14 @@ function amSignIn() {
 }
 function amSignOut() { if (!amKit) return; Promise.resolve(amKit.unauthorize()).catch(() => {}).then(() => { amMsg = 'Signed out.'; if (view === 'settings') renderSettings(); }); }
 function amPickOpen() { readForm(); edit.am = edit.am ? null : { q: '', list: null, busy: false, err: '' }; reEdit(); const el = $('#am-q'); if (el) el.focus(); }
+async function amPickLib() {
+  readForm();
+  try {
+    const r = await amNative('pick'); if (!r || r.cancelled || !edit) return;
+    edit.p.am = { id: r.storeId && r.storeId !== '0' ? String(r.storeId) : '', pid: String(r.persistentId || ''), name: r.name || 'Song', artist: r.artist || '', dur: Math.round(+r.dur || 0) };
+    edit.p.start = 0; edit.am = null; reEdit();
+  } catch (e) { toast(amErr(e), 4000); }
+}
 function amClear() { readForm(); delete edit.p.am; edit.am = null; reEdit(); }
 async function amSearch() {
   const q = ($('#am-q').value || '').trim(); if (!q) return; readForm();
@@ -1002,7 +1026,7 @@ async function amSearch() {
   } catch (e) { st.err = navigator.onLine === false ? 'You are offline. Searching needs a signal.' : amErr(e); }
   st.busy = false; if (edit && edit.am === st) reEdit();
 }
-function amChoose(i) { const x = edit.am && edit.am.list && edit.am.list[i]; if (!x) return; readForm(); edit.p.am = { id: x.id, name: x.name, artist: x.artist, dur: x.dur }; edit.p.start = 0; edit.am = null; reEdit(); amLoad().catch(() => {}); }
+function amChoose(i) { const x = edit.am && edit.am.list && edit.am.list[i]; if (!x) return; readForm(); edit.p.am = { id: x.id, name: x.name, artist: x.artist, dur: x.dur }; edit.p.start = 0; edit.am = null; reEdit(); if (!nat()) amLoad().catch(() => {}); }
 
 /* ============ team sync: one saved copy of everything per team code ============ */
 let sync = { code: '', v: 0, last: '', at: 0, dirtyAt: 0 }, syncMsg = '', syncBusy = false, syncAgain = false, syncTimer = null, syncRemote = null;
@@ -1152,7 +1176,7 @@ function paintDugout() { document.querySelectorAll('#dgStat').forEach(el => el.t
 async function fetchDugout(v) {
   const q = '?v=' + (v || 0);
   try { // through this app's own server (no cross-site limits)
-    const r = await fetch('api/dugout' + q, { cache: 'no-store' });
+    const r = await fetch(api('/api/dugout' + q), { cache: 'no-store' });
     if (r.ok && (r.headers.get('content-type') || '').includes('json')) return await r.json();
   } catch (e) {}
   const r = await fetch(DUGOUT_URL + '/api/state' + q, { cache: 'no-store' });
@@ -1217,7 +1241,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
   try { speechSynthesis.onvoiceschanged = () => view === 'settings' && renderSettings(); } catch (e) {}
   try { const sv = await kvGet('sync'); if (sv && sv.code) sync = { ...sync, ...sv }; } catch (e) {}
   render(); syncDugout(); syncRun();
-  if (data.teams.some(t => t.players.some(p => p.am))) amLoad().catch(() => {});
+  if (!nat() && data.teams.some(t => t.players.some(p => p.am))) amLoad().catch(() => {});
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
 </script>
