@@ -557,7 +557,7 @@ function renderEditor() {
 
     <h3>🎵 Walkout song</h3>
     <div class="songbox"><div class="nm">${songName ? esc(songName) : '<span class="mut">No song chosen</span>'}</div>
-      <label class="filebtn">${songName ? 'Change' : 'Choose song'}<input type="file" accept="audio/*,.mp3,.m4a,.aac,.wav" onchange="pickSong(this)"></label></div>
+      <label class="filebtn">${songName ? 'Change' : 'Choose song'}<input type="file" onchange="pickSong(this)"></label></div>
     <p class="hint">Pick an MP3/M4A from your Files app. Songs are saved on this device.</p>
     ${songName ? `<audio id="f-audio" controls preload="metadata" playsinline></audio>
     <div class="row"><label>Start at (seconds)<input id="f-start" type="number" inputmode="decimal" step="0.5" min="0" value="${+p.start || 0}"></label>
@@ -579,7 +579,7 @@ function renderEditor() {
       <button onclick="testAnn()">▶ Hear it</button>` : ''}
     ${mode === 'voice' ? `<div class="songbox" style="margin-top:10px"><div class="nm">${hasVoice ? '✅ ' + esc(p._voice ? p._voice.name : 'Recording saved') : '<span class="mut">No recording yet</span>'}</div>
         <button class="rec ${recorder ? 'live' : ''}" onclick="toggleRec()">${recorder ? '■ Stop' : '● Record'}</button></div>
-      <div class="tools">${hasVoice ? '<button onclick="testAnn()">▶ Hear it</button>' : ''}<label class="filebtn" style="background:var(--card2);color:var(--text);font-weight:400;flex:1;text-align:center">Upload clip<input type="file" accept="audio/*" onchange="pickVoice(this)"></label></div>
+      <div class="tools">${hasVoice ? '<button onclick="testAnn()">▶ Hear it</button>' : ''}<label class="filebtn" style="background:var(--card2);color:var(--text);font-weight:400;flex:1;text-align:center">Upload clip<input type="file" onchange="pickVoice(this)"></label></div>
       <label class="check"><div>Stadium echo on my voice</div><input type="checkbox" id="f-echo" ${p.echo ? 'checked' : ''}></label>` : ''}
     ${mode !== 'none' ? `<label class="check"><div>Start music under the announcement<br><small>Song plays quietly while the name is called, then comes up full.</small></div><input type="checkbox" id="f-under" ${p.under ? 'checked' : ''}></label>` : ''}
 
@@ -619,7 +619,7 @@ async function pickSong(inp) {
   edit.p._song = { data: buf, type: f.type || 'audio/mpeg', name: f.name.replace(/\.[^.]+$/, '') };
   edit.p.start = 0; renderEditor();
 }
-async function pickVoice(inp) { const f = inp.files[0]; if (!f) return; readForm(); edit.p._voice = { data: await f.arrayBuffer(), type: f.type || 'audio/mpeg', name: f.name }; renderEditor(); }
+async function pickVoice(inp) { const f = inp.files[0]; if (!f) return; readForm(); const buf = await f.arrayBuffer(); try { await decodeRaw(buf); } catch (e) { toast("That file couldn't be read as audio. Try an MP3 or M4A."); return; } edit.p._voice = { data: buf, type: f.type || 'audio/mpeg', name: f.name }; renderEditor(); }
 async function toggleRec() {
   if (recorder) { recorder.stop(); return; }
   if (!navigator.mediaDevices || !window.MediaRecorder) return toast('Recording is not supported in this browser');
@@ -756,12 +756,12 @@ function renderSfxEditor() {
     <div class="row"><label>Name<input id="s-name" value="${esc(sx.name)}" placeholder="e.g. Strikeout"></label><label class="sm">Emoji<input id="s-emo" value="${esc(sx.emoji)}" maxlength="4"></label></div>
     <h3>Audio clip</h3>
     <div class="songbox"><div class="nm">${sx._file ? esc(sx._file.name) : sx.audioId ? '✅ Clip saved' : '<span class="mut">No clip chosen</span>'}</div>
-      <label class="filebtn">Choose<input type="file" accept="audio/*" onchange="pickSfx(this)"></label></div>
+      <label class="filebtn">Choose<input type="file" onchange="pickSfx(this)"></label></div>
     <label>Volume <span class="vals" id="sv">${sx.vol}%</span><input id="s-vol" type="range" min="10" max="100" step="5" value="${sx.vol}" oninput="$('#sv').textContent=this.value+'%'"></label>
     ${sx.isNew ? '' : '<button class="danger big" onclick="delSfx()">Delete sound</button>'}`);
 }
 function readSfx() { sx.name = $('#s-name').value.trim(); sx.emoji = $('#s-emo').value.trim() || '🔊'; sx.vol = +$('#s-vol').value; }
-async function pickSfx(inp) { const f = inp.files[0]; if (!f) return; readSfx(); sx._file = { data: await f.arrayBuffer(), type: f.type || 'audio/mpeg', name: f.name.replace(/\.[^.]+$/, '') }; if (!sx.name) sx.name = sx._file.name; renderSfxEditor(); }
+async function pickSfx(inp) { const f = inp.files[0]; if (!f) return; readSfx(); const buf = await f.arrayBuffer(); try { await decodeRaw(buf); } catch (e) { toast("That file couldn't be read as audio. Try an MP3 or M4A."); return; } sx._file = { data: buf, type: f.type || 'audio/mpeg', name: f.name.replace(/\.[^.]+$/, '') }; if (!sx.name) sx.name = sx._file.name; renderSfxEditor(); }
 async function saveSfx() {
   readSfx(); if (!sx.name) return toast('Give the sound a name');
   if (!sx._file && !sx.audioId) return toast('Choose an audio clip');
