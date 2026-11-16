@@ -3,7 +3,7 @@
 // Basic: Deepgram Aura-2 on Workers AI.
 const AURA = new Set(['zeus', 'orion', 'atlas', 'apollo', 'arcas', 'aries', 'draco', 'hermes', 'hyperion', 'janus', 'jupiter', 'mars', 'neptune', 'odysseus', 'orpheus', 'pluto', 'saturn',
   'athena', 'hera', 'luna', 'thalia', 'andromeda', 'asteria', 'aurora', 'helena', 'iris', 'juno', 'minerva', 'phoebe', 'vesta']);
-const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, PUT, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, X-Team-Code, X-Audio-Name', 'Access-Control-Expose-Headers': 'X-Audio-Name', 'Access-Control-Max-Age': '86400' };
+const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, PUT, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Team-Code, X-Audio-Name', 'Access-Control-Expose-Headers': 'X-Audio-Name', 'Access-Control-Max-Age': '86400' };
 const err = (msg, status) => new Response(JSON.stringify({ error: msg }), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
 const b64 = s => Uint8Array.from(atob(s.replace(/^data:[^,]+,/, '')), c => c.charCodeAt(0));
 
@@ -190,10 +190,110 @@ async function appleMusic(env, url) {
   } catch (e) { return err(String(e && e.message || e).slice(0, 300), 500); }
 }
 
+// The Sports Hub link: sign in with a Sports Hub account and read that person's team roster and the
+// batting order of the live (or most recent) game. Everything is read as the signed-in user, so
+// Firestore's own rules decide what they may see. Nothing is stored here.
+const HUB = { key: 'AIzaSyDth-zgyTD4F8kzCyXKgrYWX_0YvwEgGYg', project: 'the-sports-hub-57584', site: 'https://thesportshub.app/' };
+const fsVal = v => !v ? null : 'stringValue' in v ? v.stringValue : 'integerValue' in v ? +v.integerValue : 'doubleValue' in v ? v.doubleValue : 'booleanValue' in v ? v.booleanValue
+  : 'arrayValue' in v ? (v.arrayValue.values || []).map(fsVal) : 'mapValue' in v ? fsObj(v.mapValue.fields) : 'timestampValue' in v ? v.timestampValue : null;
+const fsObj = f => Object.fromEntries(Object.entries(f || {}).map(([k, v]) => [k, fsVal(v)]));
+class HubErr extends Error { constructor(m, status) { super(m); this.status = status; } }
+async function hubAuth(url, body, form) {
+  const r = await fetch(url + '?key=' + HUB.key, { method: 'POST', headers: { 'Content-Type': form ? 'application/x-www-form-urlencoded' : 'application/json', Referer: HUB.site }, body: form ? new URLSearchParams(body).toString() : JSON.stringify(body) });
+  const j = await r.json().catch(() => null);
+  if (r.ok && j) return j;
+  const code = String((j && j.error && j.error.message) || '');
+  if (/INVALID_LOGIN_CREDENTIALS|INVALID_PASSWORD|EMAIL_NOT_FOUND|INVALID_EMAIL|MISSING_PASSWORD/.test(code)) throw new HubErr('That email or password is not right for The Sports Hub.', 401);
+  if (/TOO_MANY_ATTEMPTS/.test(code)) throw new HubErr('Too many tries. Wait a few minutes and try again.', 429);
+  if (/USER_DISABLED/.test(code)) throw new HubErr('That Sports Hub account is turned off.', 403);
+  if (/TOKEN_EXPIRED|INVALID_REFRESH_TOKEN|USER_NOT_FOUND|INVALID_GRANT/.test(code)) throw new HubErr('signin', 401);
+  throw new HubErr('The Sports Hub sign-in did not work (' + (code || r.status) + ')', 502);
+}
+async function hubFs(path, token) {
+  const r = await fetch('https://firestore.googleapis.com/v1/projects/' + HUB.project + '/databases/(default)/documents/' + path, { headers: { Authorization: 'Bearer ' + token } });
+  if (r.status === 404) return null;
+  if (r.status === 401) throw new HubErr('signin', 401);
+  if (r.status === 403) throw new HubErr('Your Sports Hub account is not on that team.', 403);
+  const j = await r.json().catch(() => null);
+  if (!r.ok || !j) throw new HubErr('The Sports Hub did not answer (' + r.status + ')', 502);
+  return j;
+}
+// Batting order as it stands now: the saved lineup plus any players added or removed during the game.
+function hubOrder(g) {
+  let lu = (Array.isArray(g.lineup) ? g.lineup : []).slice();
+  const us = g.home ? 'home' : 'away';
+  for (const e of Array.isArray(g.events) ? g.events : []) if (e && e.t === 'lu' && e.side === us) {
+    if (e.op === 'add') { if (!lu.includes(e.ref)) lu.push(e.ref); } else if (e.op === 'rm' && lu.length > 1) lu = lu.filter(x => x !== e.ref);
+  }
+  return lu.map(String);
+}
+function hubPickGame(games, today) {
+  const has = games.filter(g => !g.practice && Array.isArray(g.lineup) && g.lineup.length);
+  const stamp = g => String(g.date || '') + ' ' + String(g.time || '');
+  const newest = (a, b) => stamp(b).localeCompare(stamp(a)) || (b.updatedAt || 0) - (a.updatedAt || 0);
+  const live = has.filter(g => g.status === 'live').sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  if (live.length) return live[0];
+  const past = has.filter(g => !today || String(g.date || '') <= today).sort(newest);
+  return past[0] || has.sort((a, b) => -newest(a, b))[0] || null;
+}
+async function sportsHub(request, url) {
+  try {
+    if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+    const sub = url.pathname.slice('/api/hub/'.length);
+    if (request.method === 'POST') {
+      const b = await request.json().catch(() => ({}));
+      if (sub === 'login') {
+        if (!b.email || !b.password) return err('Enter your Sports Hub email and password', 400);
+        const j = await hubAuth('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword', { email: String(b.email).trim(), password: String(b.password), returnSecureToken: true });
+        return json({ uid: j.localId, email: j.email, token: j.idToken, refresh: j.refreshToken, expires: +j.expiresIn || 3600 });
+      }
+      if (sub === 'refresh') {
+        if (!b.refresh) return err('signin', 401);
+        const j = await hubAuth('https://securetoken.googleapis.com/v1/token', { grant_type: 'refresh_token', refresh_token: String(b.refresh) }, true);
+        return json({ uid: j.user_id, token: j.id_token, refresh: j.refresh_token, expires: +j.expires_in || 3600 });
+      }
+      return err('Not found', 404);
+    }
+    const token = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, ''); if (!token) return err('signin', 401);
+    if (sub === 'teams') {
+      const uid = url.searchParams.get('uid') || ''; if (!/^[A-Za-z0-9]{6,64}$/.test(uid)) return err('signin', 401);
+      const j = await hubFs('users/' + uid + '/teams?pageSize=100', token);
+      const teams = ((j && j.documents) || []).map(d => ({ id: d.name.split('/').pop(), ...fsObj(d.fields) })).filter(t => !t.hidden && t.status !== 'pending')
+        .map(t => ({ id: String(t.teamId || t.id), name: String(t.name || t.teamId || t.id) }));
+      return json({ teams });
+    }
+    if (sub === 'lineup') {
+      const team = (url.searchParams.get('team') || '').toLowerCase().trim(); if (!/^[a-z0-9_-]{2,48}$/.test(team)) return err('Enter the team code from The Sports Hub', 400);
+      const today = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get('today') || '') ? url.searchParams.get('today') : '';
+      const main = await hubFs('teams/' + team + '/team/main', token); if (!main) return err('No Sports Hub team has that code', 404);
+      const t = fsObj(main.fields);
+      const roster = (Array.isArray(t.players) ? t.players : []).filter(p => p && p.id && !p.sample).map(p => ({ id: String(p.id), name: String(p.name || '').trim(), num: String(p.num ?? '').trim() }));
+      const mask = ['status', 'date', 'time', 'lineup', 'home', 'updatedAt', 'practice', 'opponent'].map(f => 'mask.fieldPaths=' + f).join('&');
+      const games = []; let page = '';
+      for (let i = 0; i < 6; i++) {
+        const j = await hubFs('teams/' + team + '/games?pageSize=300&' + mask + (page ? '&pageToken=' + encodeURIComponent(page) : ''), token);
+        ((j && j.documents) || []).forEach(d => games.push({ id: d.name.split('/').pop(), ...fsObj(d.fields) }));
+        page = (j && j.nextPageToken) || ''; if (!page) break;
+      }
+      const pick = hubPickGame(games, today);
+      let order = [], game = null;
+      if (pick) {
+        const full = await hubFs('teams/' + team + '/games/' + pick.id, token), g = full ? fsObj(full.fields) : pick;
+        const ids = new Set(roster.map(p => p.id));
+        order = hubOrder(g).filter(id => ids.has(id));
+        game = { id: pick.id, opponent: String(g.opponent || 'Opponent'), date: String(g.date || ''), status: String(g.status || 'scheduled') };
+      }
+      return json({ team: String(t.name || team), roster, game, order });
+    }
+    return err('Not found', 404);
+  } catch (e) { return e instanceof HubErr ? err(e.message, e.status) : err('The Sports Hub link had a problem: ' + String(e && e.message || e).slice(0, 200), 502); }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === '/api/dugout') return dugout(env, url.search);
+    if (url.pathname.startsWith('/api/hub/')) return sportsHub(request, url);
     if (url.pathname === '/api/music/token' || url.pathname === '/api/music/search') return request.method === 'OPTIONS' ? new Response(null, { headers: CORS }) : appleMusic(env, url);
     if (url.pathname === '/api/sync' || url.pathname.startsWith('/api/sync/')) { try { return await teamSync(request, env, url); } catch (e) { return err('Team sync had a problem: ' + String(e && e.message || e).slice(0, 200), 502); } }
     if (url.pathname === '/api/sfx' || url.pathname === '/api/sfx/clip') {
