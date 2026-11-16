@@ -3,7 +3,7 @@
 // Basic: Deepgram Aura-2 on Workers AI.
 const AURA = new Set(['zeus', 'orion', 'atlas', 'apollo', 'arcas', 'aries', 'draco', 'hermes', 'hyperion', 'janus', 'jupiter', 'mars', 'neptune', 'odysseus', 'orpheus', 'pluto', 'saturn',
   'athena', 'hera', 'luna', 'thalia', 'andromeda', 'asteria', 'aurora', 'helena', 'iris', 'juno', 'minerva', 'phoebe', 'vesta']);
-const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
+const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, PUT, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, X-Team-Code, X-Audio-Name', 'Access-Control-Expose-Headers': 'X-Audio-Name', 'Access-Control-Max-Age': '86400' };
 const err = (msg, status) => new Response(JSON.stringify({ error: msg }), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
 const b64 = s => Uint8Array.from(atob(s.replace(/^data:[^,]+,/, '')), c => c.charCodeAt(0));
 
@@ -118,10 +118,53 @@ async function sfxClip(u) {
   } catch (e) { return err('Could not download that sound', 502); }
 }
 
+// Team sync: one saved copy of everything (players, sounds, settings + the audio files) per team code, in KV.
+// The code never gets stored; its hash is the key, so only phones that know the code can read or change the team.
+async function teamKey(request) {
+  let code = ''; try { code = decodeURIComponent(request.headers.get('X-Team-Code') || '').trim().toLowerCase(); } catch { }
+  if (code.length < 6 || code.length > 64) return null;
+  const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('gs-walkout:' + code));
+  return 't:' + [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 40) + ':';
+}
+async function teamSync(request, env, url) {
+  if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+  if (!env.SYNC) return err('Team sync storage is not set up yet', 501);
+  const k = await teamKey(request); if (!k) return err('The team code needs at least 6 characters', 401);
+  const sub = url.pathname.slice('/api/sync'.length), m = request.method;
+  if (sub === '') {
+    const cur = await env.SYNC.getWithMetadata(k + 'data', 'text'), v = cur.value ? (cur.metadata && cur.metadata.v) || 1 : 0;
+    if (m === 'GET') return v && +url.searchParams.get('v') !== v ? new Response('{"v":' + v + ',"data":' + cur.value + '}', { headers: { ...CORS, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }) : json({ v });
+    if (m !== 'PUT') return err('GET or PUT only', 405);
+    const body = await request.text();
+    if (body.length > 2e6) return err('Too much team data', 413);
+    try { const d = JSON.parse(body); if (!d || !Array.isArray(d.teams)) throw 0; } catch { return err('Bad team data', 400); }
+    if (v && +url.searchParams.get('base') !== v) return json({ v }, 409);
+    await env.SYNC.put(k + 'data', body, { metadata: { v: v + 1, at: Date.now() } });
+    return json({ v: v + 1 });
+  }
+  if (sub === '/audio' && m === 'GET') {
+    const ids = []; let cursor;
+    do { const l = await env.SYNC.list({ prefix: k + 'a:', cursor }); l.keys.forEach(x => ids.push(x.name.slice(k.length + 2))); cursor = l.list_complete ? null : l.cursor; } while (cursor);
+    return json({ ids });
+  }
+  const a = /^\/audio\/([A-Za-z0-9_-]{4,40})$/.exec(sub); if (!a) return err('Not found', 404);
+  if (m === 'GET') {
+    const r = await env.SYNC.getWithMetadata(k + 'a:' + a[1], 'stream'); if (!r.value) return err('Not saved yet', 404);
+    return new Response(r.value, { headers: { ...CORS, 'Content-Type': (r.metadata && r.metadata.type) || 'audio/mpeg', 'X-Audio-Name': encodeURIComponent((r.metadata && r.metadata.name) || ''), 'Cache-Control': 'no-store' } });
+  }
+  if (m !== 'PUT') return err('GET or PUT only', 405);
+  if (+(request.headers.get('content-length') || 0) > 24e6) return err('That audio file is too big to sync (24 MB max)', 413);
+  const buf = await request.arrayBuffer(); if (!buf.byteLength || buf.byteLength > 24e6) return err('That audio file is too big to sync (24 MB max)', 413);
+  let name = ''; try { name = decodeURIComponent(request.headers.get('X-Audio-Name') || '').slice(0, 120); } catch { }
+  await env.SYNC.put(k + 'a:' + a[1], buf, { metadata: { type: (request.headers.get('content-type') || 'audio/mpeg').slice(0, 60), name } });
+  return json({ ok: true });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === '/api/dugout') return dugout(env, url.search);
+    if (url.pathname === '/api/sync' || url.pathname.startsWith('/api/sync/')) { try { return await teamSync(request, env, url); } catch (e) { return err('Team sync had a problem: ' + String(e && e.message || e).slice(0, 200), 502); } }
     if (url.pathname === '/api/sfx' || url.pathname === '/api/sfx/clip') {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
       if (request.method !== 'GET') return err('GET only', 405);

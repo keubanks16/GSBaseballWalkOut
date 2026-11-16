@@ -8,7 +8,11 @@ A BallparkDJ-style walkout (walk-up) song app for GS Baseball. Runs in the brows
 - **Sounds:** your own clips, and a search that finds sound effects online (Myinstants) and saves them to the phone
 - **Multiple teams**, plus a backup file to move everything to another phone
 
-All songs stay on the device (IndexedDB); nothing is uploaded.
+Songs are kept on the device (IndexedDB) so games work with no signal.
+
+## Team sync
+
+Settings → Team sync saves everything (players, songs, sounds, announcer clips, settings) to the Worker's KV namespace (`SYNC`) under a team code. Any phone that enters the same code gets the same setup and stays in step. Only the hash of the code is stored. Audio files up to 24 MB each.
 
 ## Pro announcer (Cloudflare)
 
