@@ -821,6 +821,20 @@ function renderSettings() {
       <label>Team name<input value="${esc(t.name)}" onchange="team().name=this.value.trim()||'Team';save();render()"></label>
       <div class="tools"><button onclick="addTeam()">+ New team</button>${data.teams.length > 1 ? '<button class="danger" onclick="delTeam()">Delete team</button>' : ''}</div></div>
 
+    <div class="sec"><h3>🔗 The Sports Hub</h3>
+      <p class="hint">Adds your Sports Hub roster by itself and keeps the batting order matched to the live game (or the most recent one). Sign in with your Sports Hub account; it only reads teams you are on.</p>
+      ${!hub.uid ? `<label>Sports Hub email<input id="hub-email" type="email" autocapitalize="off" autocomplete="username" value="${esc(hub.email)}"></label>
+        <label>Password<input id="hub-pass" type="password" autocomplete="current-password"></label>
+        <div class="tools"><button class="gold" onclick="hubSignIn()">Sign in to The Sports Hub</button></div>`
+      : hub.on ? `<p>✅ Linked to <b>${esc(hub.teamName || hub.teamId)}</b> → ${esc(hubTeam().name)}</p>
+        <div class="tools"><button onclick="hubSync(true)">↻ Update now</button><button onclick="hubUnlink()">Unlink</button><button class="danger" onclick="hubSignOut()">Sign out</button></div>`
+      : `<p>Signed in as <b>${esc(hub.email)}</b></p>
+        ${hub.teams && hub.teams.length ? `<label>Your Sports Hub team<select id="hub-team">${hub.teams.map(x => `<option value="${esc(x.id)}">${esc(x.name)} (${esc(x.id)})</option>`).join('')}</select></label>` : ''}
+        <label>${hub.teams && hub.teams.length ? 'Or type a team code' : 'Team code from The Sports Hub'}<input id="hub-code" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="e.g. gs-baseball-sp27"></label>
+        <p class="hint">Players and the batting order go into the team showing now: <b>${esc(team().name)}</b>. This turns off the Dugout Lineup link.</p>
+        <div class="tools"><button class="gold" onclick="hubLink()">Link this team</button><button onclick="hubSignOut()">Sign out</button></div>`}
+      <p class="hint" id="hubStat">${esc(hubStatus())}</p></div>
+
     <div class="sec"><h3>🔗 Dugout Lineup</h3>
       <label class="check"><div>Get the batting order from Dugout Lineup<br><small>Players, numbers, order and who's up next follow the coach's Dugout Lineup app.</small></div><input type="checkbox" ${s.dugout.on ? 'checked' : ''} onchange="S().dugout.on=this.checked;S().dugout.v=0;save();renderSettings();this.checked&&syncDugout(true)"></label>
       ${s.dugout.on ? `<label>Use it for this team<select onchange="S().dugout.teamId=this.value;S().dugout.v=0;save();syncDugout(true)">${data.teams.map(x => `<option value="${x.id}" ${x.id === dgTeam().id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>
@@ -1160,6 +1174,94 @@ async function keepAwake() { try { if ('wakeLock' in navigator && document.visib
 document.addEventListener('visibilitychange', keepAwake);
 document.addEventListener('pointerdown', () => { keepAwake(); }, { passive: true });
 
+/* ============ The Sports Hub link: roster + batting order from the live or most recent game ============ */
+// Kept on this phone only (never in the team copy): the sign-in and which Sports Hub team is linked.
+let hub = { on: false, email: '', uid: '', rt: '', tok: '', exp: 0, teamId: '', teamName: '', wTeam: '', teams: null, at: 0, err: '', game: null, sig: '' }, hubBusy = false, hubMsg = '';
+const hubSave = () => kvSet('hub', hub).catch(() => {});
+const hubTeam = () => data.teams.find(x => x.id === hub.wTeam) || team();
+const hubPost = async (path, body) => { const r = await fetch(api('/api/hub/' + path), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }), j = await r.json().catch(() => null); if (!r.ok || !j) throw new Error((j && j.error) || 'The Sports Hub link is not reachable (' + r.status + ')'); return j; };
+async function hubToken() {
+  if (hub.tok && Date.now() < hub.exp - 60000) return hub.tok;
+  if (!hub.rt) throw new Error('signin');
+  const j = await hubPost('refresh', { refresh: hub.rt });
+  hub.tok = j.token; hub.rt = j.refresh || hub.rt; hub.exp = Date.now() + j.expires * 1000; hubSave(); return hub.tok;
+}
+async function hubGet(path) {
+  for (let i = 0; i < 2; i++) {
+    const r = await fetch(api('/api/hub/' + path), { cache: 'no-store', headers: { Authorization: 'Bearer ' + await hubToken() } }), j = await r.json().catch(() => null);
+    if (r.status === 401 && i === 0) { hub.tok = ''; continue; }
+    if (!r.ok || !j) throw new Error((j && j.error) || 'The Sports Hub link is not reachable (' + r.status + ')');
+    return j;
+  }
+}
+const hubWhy = e => { const m = String(e && e.message || e); return m === 'signin' ? 'Sign in to The Sports Hub again.' : navigator.onLine === false ? 'No signal.' : m; };
+async function hubSignIn() {
+  const email = ($('#hub-email').value || '').trim(), password = $('#hub-pass').value || '';
+  if (!email || !password) return toast('Enter your Sports Hub email and password');
+  hubMsg = 'Signing in…'; renderSettings();
+  try {
+    const j = await hubPost('login', { email, password });
+    hub = { ...hub, email: j.email || email, uid: j.uid, rt: j.refresh, tok: j.token, exp: Date.now() + j.expires * 1000, on: false, teams: null, err: '' };
+    try { hub.teams = (await hubGet('teams?uid=' + encodeURIComponent(hub.uid))).teams; } catch (e) { hub.teams = []; }
+    hubMsg = ''; hubSave();
+  } catch (e) { hubMsg = hubWhy(e); }
+  renderSettings();
+}
+function hubSignOut() { if (!confirm('Sign out of The Sports Hub on this phone? Your players and songs stay.')) return; hub = { on: false, email: '', uid: '', rt: '', tok: '', exp: 0, teamId: '', teamName: '', wTeam: '', teams: null, at: 0, err: '', game: null, sig: '' }; hubMsg = ''; hubSave(); renderSettings(); }
+async function hubLink() {
+  const sel = $('#hub-team'), typed = $('#hub-code');
+  const id = ((typed && typed.value.trim()) || (sel && sel.value) || '').toLowerCase(); if (!id) return toast('Pick your team or type its team code');
+  hub.teamId = id; hub.wTeam = team().id; hub.sig = ''; hub.game = null; hubMsg = 'Getting the roster and lineup…'; renderSettings();
+  const ok = await hubSync(true, true);
+  if (ok) { hub.on = true; S().dugout.on = false; save(); hubMsg = ''; } else { hub.teamId = ''; }
+  hubSave(); renderSettings();
+}
+function hubUnlink() { hub.on = false; hub.teamId = ''; hub.game = null; hub.sig = ''; hubMsg = ''; hubSave(); renderSettings(); }
+async function hubSync(manual, linking) {
+  if ((!hub.on && !linking) || !hub.teamId || hubBusy) return false;
+  hubBusy = true; let ok = false;
+  try {
+    const d = new Date(), today = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    const j = await hubGet('lineup?team=' + encodeURIComponent(hub.teamId) + '&today=' + today);
+    hub.at = Date.now(); hub.err = ''; hub.teamName = j.team || hub.teamId; ok = true;
+    const sig = JSON.stringify([j.roster, j.order, j.game && j.game.id]);
+    if (sig !== hub.sig || manual) { const newGame = !!(j.game && (!hub.game || hub.game.id !== j.game.id)); hub.sig = sig; hub.game = j.game; hubApply(hubTeam(), j, manual, newGame); }
+    else hub.game = j.game;
+  } catch (e) { hub.err = hubWhy(e); if (manual) { hubMsg = hub.err; toast(hub.err, 3500); } }
+  hubBusy = false; hubSave();
+  const el = $('#hubStat'); if (el) el.textContent = hubStatus();
+  return ok;
+}
+function hubStatus() {
+  if (hubMsg) return hubMsg;
+  if (!hub.on) return '';
+  if (hub.err) return '⚠️ ' + hub.err + ' Using the last lineup.';
+  const g = hub.game, m = Math.round((Date.now() - hub.at) / 60000);
+  return (g ? 'Batting order from ' + (g.status === 'live' ? 'the live game' : 'the last game') + ' vs ' + g.opponent + (g.date ? ' (' + g.date + ')' : '') : 'No game with a lineup yet, so only the roster was added') + ' · checked ' + (m < 1 ? 'just now' : m + ' min ago');
+}
+function hubApply(t, j, manual, newGame) {
+  const map = {}, used = new Set(); let added = 0, renamed = 0;
+  for (const d of j.roster || []) {
+    const name = String(d.name || '').trim(), num = String(d.num ?? '').trim(); if (!name) continue;
+    let p = t.players.find(x => x.hubId === d.id);
+    if (!p) p = t.players.find(x => !used.has(x.id) && !x.hubId && norm(x.name) === norm(name));
+    if (!p && num) { const c = t.players.filter(x => !used.has(x.id) && !x.hubId && String(x.number).trim() === num); if (c.length === 1) p = c[0]; }
+    if (!p) { p = newPlayer(); p.name = name; p.number = num; t.players.push(p); added++; }
+    if (p.name !== name) { p.name = name; renamed++; }
+    p.number = num; p.hubId = d.id; used.add(p.id); map[d.id] = p.id;
+  }
+  const before = t.lineup.join(), upId = t.lineup[t.upNext];
+  const order = (j.order || []).map(id => map[id]).filter(Boolean);
+  if (order.length) t.lineup = order;
+  if (before !== t.lineup.join()) { const k = newGame ? 0 : t.lineup.indexOf(upId); t.upNext = k < 0 ? 0 : k; }
+  cleanLineup(t); save();
+  if (before !== t.lineup.join() || added || renamed || manual)
+    toast('🔗 Lineup updated from The Sports Hub' + (added ? ` · ${added} new player${added > 1 ? 's' : ''} need${added > 1 ? '' : 's'} a song` : ''), 3000);
+  if (!$('#sheet').classList.contains('open')) render();
+}
+setInterval(() => { if (hub.on && document.visibilityState === 'visible' && view === 'game' && !$('#sheet').classList.contains('open')) hubSync(); }, 20000);
+document.addEventListener('visibilitychange', () => { if (hub.on && document.visibilityState === 'visible') hubSync(); });
+
 /* ============ Dugout Lineup link ============ */
 const DUGOUT_URL = 'https://dugoutlineup.kollinmeubanks.workers.dev';
 const dgTeam = () => data.teams.find(x => x.id === S().dugout.teamId) || data.teams[0];
@@ -1185,7 +1287,7 @@ async function fetchDugout(v) {
 }
 let dgBusy = false;
 async function syncDugout(manual) {
-  const D = S().dugout; if (!D || !D.on || dgBusy) return;
+  const D = S().dugout; if (!D || !D.on || dgBusy || hub.on) return;
   dgBusy = true;
   try {
     const j = await fetchDugout(manual ? 0 : D.v);
@@ -1240,7 +1342,8 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
   try { speechSynthesis.onvoiceschanged = () => view === 'settings' && renderSettings(); } catch (e) {}
   try { const sv = await kvGet('sync'); if (sv && sv.code) sync = { ...sync, ...sv }; } catch (e) {}
-  render(); syncDugout(); syncRun();
+  try { const hv = await kvGet('hub'); if (hv && hv.uid) hub = { ...hub, ...hv }; } catch (e) {}
+  render(); syncDugout(); syncRun(); hubSync();
   if (!nat() && data.teams.some(t => t.players.some(p => p.am))) amLoad().catch(() => {});
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
