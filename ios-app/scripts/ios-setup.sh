@@ -34,4 +34,14 @@ setk NSMicrophoneUsageDescription string "Record your own voice announcing a pla
 gem list -i xcodeproj >/dev/null 2>&1 || gem install --user-install xcodeproj
 ruby scripts/ios-project.rb
 npx cap sync ios
+
+# Register the app's own plugin the same way installed plugins are: by class name in the bundled config.
+node -e '
+const fs = require("fs"), f = "ios/App/App/capacitor.config.json";
+const c = JSON.parse(fs.readFileSync(f, "utf8"));
+c.packageClassList = Array.from(new Set([...(c.packageClassList || []), "AppleMusicPlugin"]));
+fs.writeFileSync(f, JSON.stringify(c, null, "\t"));
+console.log("packageClassList:", c.packageClassList.join(", "));
+'
+grep -q AppleMusicPlugin ios/App/App/capacitor.config.json || { echo "::error::AppleMusicPlugin is not in the bundled capacitor.config.json"; exit 1; }
 echo "iOS project ready in ios-app/ios/App"

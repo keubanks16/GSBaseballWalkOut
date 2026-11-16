@@ -994,6 +994,12 @@ const amCall = (m, o, ms) => Promise.race([amNative(m, o).then(r => r || {}, e =
 async function amNativeStart(p, st, gone) {
   const C = nat(), hdr = ((C.PluginHeaders || []).some(h => h && h.name === 'AppleMusic') ? 'yes' : 'no');
   const args = { persistentId: String(p.am.pid || ''), storeId: String(p.am.id || ''), start: st }, log = [];
+  const pg = await amCall('ping', {}, 2500); if (gone()) return;
+  if (pg.timeout || pg.error) {
+    amDiag = new Date().toLocaleTimeString() + ' · ' + p.am.name + ' [plugin ' + hdr + '] bridge: ' + (pg.error || 'no answer');
+    throw new Error('The Apple Music part of the app did not load in this build. Details are under Settings → Apple Music.');
+  }
+  log.push('bridge ok, access ' + pg.auth);
   for (const system of [false, true]) {
     const r = await amCall('play', { ...args, system }, 6000); if (gone()) return;
     let s = {};
