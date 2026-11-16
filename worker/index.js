@@ -72,19 +72,40 @@ function sfxList(j) {
   }
   return out;
 }
+const unent = t => t.replace(/&(#x?[0-9a-f]+|amp|quot|apos|lt|gt);/gi, (m, c) => c[0] === '#' ? String.fromCodePoint(/^#x/i.test(c) ? parseInt(c.slice(2), 16) : +c.slice(1)) : ({ amp: '&', quot: '"', apos: "'", lt: '<', gt: '>' })[c.toLowerCase()]);
+// Reads the Myinstants search page itself, for when the API in front of it is down.
+function sfxPage(html) {
+  const out = [], seen = new Set(), re = /play\('([^']+\.mp3)'[^>]*>/g;
+  let m;
+  while ((m = re.exec(html)) && out.length < 30) {
+    const mp3 = new URL(m[1], 'https://www.myinstants.com').href; if (seen.has(mp3)) continue; seen.add(mp3);
+    const near = m[0] + html.slice(re.lastIndex, re.lastIndex + 900);
+    const t = /title="Play (.+?) sound"/i.exec(near) || /class="instant-link[^"]*"[^>]*>\s*([^<]+?)\s*</i.exec(near);
+    const name = t ? unent(t[1]).trim() : decodeURIComponent(mp3.split('/').pop()).replace(/\.mp3$/i, '').replace(/[_-]+/g, ' ');
+    out.push({ title: name.slice(0, 80) || 'Sound', mp3 });
+  }
+  return out;
+}
 async function sfxSearch(env, q) {
-  let last = 'Sound search is not reachable right now';
+  const tried = [];
   for (const base of env.SFX_API ? [env.SFX_API] : SFX_APIS) {
+    const tag = new URL(base).hostname.split('.').slice(-2, -1)[0];
     try {
       const r = await fetch(base.replace(/\/$/, '') + '/search?q=' + encodeURIComponent(q), { headers: { ...UA, Accept: 'application/json' } });
       const t = await r.text();
-      let j; try { j = JSON.parse(t); } catch { last = 'Sound search sent back a web page instead of results'; continue; }
+      let j; try { j = JSON.parse(t); } catch { tried.push(tag + ' ' + r.status + ' page'); continue; }
       const list = sfxList(j);
-      if (!r.ok && !list.length) { last = 'Sound search failed (' + r.status + ')'; continue; }
+      if (!list.length && (!r.ok || (j && +j.status >= 400))) { tried.push(tag + ' ' + (r.ok ? j.status : r.status)); continue; }
       return json({ results: list });
-    } catch (e) { last = 'Sound search is not reachable right now'; }
+    } catch (e) { tried.push(tag + ' down'); }
   }
-  return err(last, 502);
+  try {
+    const r = await fetch('https://www.myinstants.com/en/search/?name=' + encodeURIComponent(q), { headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1', Accept: 'text/html', 'Accept-Language': 'en-US,en;q=0.9' } });
+    const t = await r.text(), list = sfxPage(t);
+    if (list.length || (r.ok && /instant|No results|myinstants/i.test(t))) return json({ results: list });
+    tried.push('site ' + r.status);
+  } catch (e) { tried.push('site down'); }
+  return err('Sound search is not answering right now (' + tried.join(', ') + ')', 502);
 }
 async function sfxClip(u) {
   let t; try { t = new URL(u); } catch { return err('Bad link', 400); }
