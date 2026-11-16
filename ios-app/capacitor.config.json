@@ -1,0 +1,9 @@
+{
+  "appId": "com.kollinmeubanks.gswalkout",
+  "appName": "GS Walkout",
+  "webDir": "www",
+  "backgroundColor": "#04122D",
+  "ios": {
+    "contentInset": "never"
+  }
+}
